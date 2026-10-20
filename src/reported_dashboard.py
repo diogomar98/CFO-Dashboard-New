@@ -82,7 +82,7 @@ def render_reported_dashboard():
     """, unsafe_allow_html=True)
     st.caption("A.R.C. / CFO COMMAND CENTER — REPORTED ACTUALS")
     st.title("ABN AMRO | Quarterly CFO Cockpit")
-    st.caption(f"Latest financial close: {_label_date(latest_date)} · 30 June 2026 · Quarterly reported data, not live / daily data")
+    st.caption(f"Latest financial close: {_label_date(latest_date)} · {latest_date:%d %B %Y} · Quarterly reported data, not live / daily data")
     st.caption(SOURCE)
 
     division = st.selectbox("Reporting scope", SEGMENTS, index=0)
@@ -116,7 +116,7 @@ def render_reported_dashboard():
             now, before = _history_stats(group, metric)
             with column: _tile(label, now, before, pct)
         st.caption("The net interest margin is reported directly by ABN AMRO in basis points; it is not estimated from total loans.")
-        st.metric("Reported NIM", f"{latest['nim_bps']:.1f} bps", _quarterly_delta(latest["nim_bps"], group.iloc[-2]["nim_bps"], False))
+        st.metric("Reported NIM", f"{latest['nim_bps']:.1f} bps", f"{latest['nim_bps'] - group.iloc[-2]['nim_bps']:+.1f} bps QoQ", delta_color="off")
         st.subheader("Income and costs (€m)")
         _series(group, ["operating_income_m", "operating_expenses_m", "net_profit_m"])
         _snapshot(group, ["nii_m", "net_fee_income_m", "operating_income_m", "operating_expenses_m", "impairment_charges_m", "net_profit_m", "nim_bps", "roe_pct", "cost_income_ratio_pct"])
