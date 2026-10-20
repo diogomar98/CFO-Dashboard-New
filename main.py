@@ -41,6 +41,12 @@ st.set_page_config(
     initial_sidebar_state="collapsed",
 )
 
+# Factsheet-only reported mode takes precedence when verified quarterly data exists.
+# The original prototype shell is retained as a fallback if these data files are absent.
+from src.reported_dashboard import render_reported_dashboard
+if render_reported_dashboard():
+    st.stop()
+
 from src.openai_partner import test_llm
 
 if st.button("Test LLM"):
