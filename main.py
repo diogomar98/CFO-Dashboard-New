@@ -44,8 +44,9 @@ st.set_page_config(
 # Factsheet-only reported mode takes precedence when verified quarterly data exists.
 # The original prototype shell is retained as a fallback if these data files are absent.
 from src.reported_dashboard import render_reported_dashboard
-if render_reported_dashboard():
-    st.stop()
+if not render_reported_dashboard():
+    st.error("Reported ABN AMRO data is missing. Add data/abn_quarterly.csv and data/abn_segments_quarterly.csv. Synthetic fallback is disabled.")
+st.stop()
 
 from src.openai_partner import test_llm
 
