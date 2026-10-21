@@ -1,0 +1,33 @@
+name: Public ABN 2021-on audit
+
+on:
+  pull_request:
+    paths:
+      - "research/audit_2021_disclosures.py"
+      - ".github/workflows/public-abn-2021-audit.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install public evidence validation libraries
+        run: python -m pip install requests beautifulsoup4 openpyxl
+      - name: Audit 2021–2026 reporting files and verify ECB links
+        run: python research/audit_2021_disclosures.py
+      - name: Export row evidence and verification queue
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: abn-2021-source-cell-review
+          path: research/2021_audit_output/
+          retention-days: 30
+          if-no-files-found: warn
