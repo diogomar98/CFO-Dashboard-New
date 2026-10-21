@@ -87,7 +87,7 @@ class ReportedBriefTests(unittest.TestCase):
         self.assertNotIn("load_news_signals", code)
         self.assertNotIn("load_articles()", code)
         self.assertIn("Synthetic news stories", code)
-        self.assertIn("src.modules.reported_brief", Path("src/real_data_mode.py").read_text(encoding="utf-8"))
+        self.assertIn("src.reported_brief", Path("src/real_data_mode.py").read_text(encoding="utf-8"))
         self.assertTrue("source connection pending" in code)
 
 
