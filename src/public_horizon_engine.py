@@ -189,6 +189,10 @@ def build_public_horizon(frame, *, model_preference="auto", rate_shock_bps=0.0,
     n=len(frame)
     if n != 22:
         raise ValueError("Public forecast requires exactly 22 independently reconciled quarters.")
+    periods=pd.to_datetime(frame["date"]).dt.to_period("Q")
+    if (frame["date"].duplicated().any()
+        or list(periods) != list(pd.period_range("2021Q1","2026Q2",freq="Q"))):
+        raise ValueError("Forecast input has duplicated, missing or out-of-order public quarters.")
     dfr=frame["dfr_qavg_pct"].to_numpy(dtype=float)
     dfr_quarter_end=frame["dfr_qend_pct"].to_numpy(dtype=float)
     info={}
