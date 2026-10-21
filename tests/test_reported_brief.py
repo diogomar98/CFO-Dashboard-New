@@ -5,7 +5,7 @@ from pathlib import Path
 import pandas as pd
 
 from src.real_data_mode import load_reported, build_reported_state
-from src.modules.reported_brief import (
+from src.reported_brief import (
     METRICS, EXTRA, SEGMENT_METRICS, BRIEF_CSS,
     chart_rows, compare_actuals, _metric_bar_chart, _primary_card, _key_insights,
 )
@@ -83,7 +83,7 @@ class ReportedBriefTests(unittest.TestCase):
         self.assertEqual(len(_key_insights(state)), 3)
 
     def test_news_is_explicitly_not_the_prototype_feed(self):
-        code = Path("src/modules/reported_brief.py").read_text(encoding="utf-8")
+        code = Path("src/reported_brief.py").read_text(encoding="utf-8")
         self.assertNotIn("load_news_signals", code)
         self.assertNotIn("load_articles()", code)
         self.assertIn("Synthetic news stories", code)
