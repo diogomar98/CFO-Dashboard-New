@@ -120,7 +120,7 @@ This iteration updates **Real Data / Morning Brief only**; the working Synthetic
 
 ### Files to copy for ABN
 If the earlier dual-mode version is already running in a separate ABN Databricks test folder:
-1. **Add** `src/modules/reported_brief.py`.
+1. **Add** `src/reported_brief.py`.
 2. **Replace** `src/real_data_mode.py`.
 
 No changes to `main.py`, factsheet CSVs, deployment configuration, `requirements.txt`, `src/hud_css.py` or original synthetic modules for this iteration. Validate hover/focus, expansion, drilldowns, modal scrolling, Synthetic-mode regression and Group/segment filtering inside the actual workspace.
