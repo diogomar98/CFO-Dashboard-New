@@ -46,7 +46,8 @@ st.set_page_config(
 
 from src.openai_partner import test_llm
 
-if st.button("Test LLM"):
+# The prototype connectivity test must not be confused with the reported-data Copilot.
+if get_data_mode() == "synthetic" and st.button("Test LLM"):
     st.write(test_llm())
 
 # Emitted in cascade order; LOCAL_CSS last so this cockpit's overrides win.
