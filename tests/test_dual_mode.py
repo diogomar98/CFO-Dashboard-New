@@ -127,7 +127,7 @@ class ReportedDataTests(unittest.TestCase):
         self.assertIn('title="Q1 2026:', output)
         self.assertIn('title="Q2 2026:', output)
         self.assertNotIn("7Q TREND", output)
-        heights = [float(v) for v in re.findall(r'height:(\\d+\\.\\d+)px', output)]
+        heights = [float(v) for v in re.findall(r'height:(\d+\.\d+)px', output)]
         self.assertEqual(len(heights), 7)
         # A 0.32 pp CET1 change against ~16% should not fill a 32px plot.
         self.assertLess(abs(heights[-1] - heights[-2]), 1.2)
