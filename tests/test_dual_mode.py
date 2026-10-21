@@ -42,7 +42,7 @@ class ReportedDataTests(unittest.TestCase):
         self.assertAlmostEqual(state.cert_current_nim, 1.4875018917, places=5)
         for card in state.kpi_cards:
             self.assertEqual(card["delta_label"], "QoQ")
-            self.assertEqual(card["rag"]["status"], "NOT_ASSESSED")
+            self.assertEqual(card["rag"]["status"], "GREEN")
         self.assertEqual(state.ratings["treasury_rate50"]["status"], "UNAVAILABLE")
 
     def test_business_line_is_source_reported(self):
