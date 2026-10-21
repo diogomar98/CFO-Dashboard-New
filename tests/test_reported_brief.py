@@ -8,6 +8,7 @@ from src.real_data_mode import load_reported, build_reported_state
 from src.reported_brief import (
     METRICS, EXTRA, SEGMENT_METRICS, BRIEF_CSS,
     chart_rows, compare_actuals, _metric_bar_chart, _primary_card, _key_insights,
+    _prototype_article, load_existing_news,
 )
 
 
@@ -16,9 +17,12 @@ class ReportedBriefTests(unittest.TestCase):
     def setUpClass(cls):
         cls.group, cls.segments = load_reported()
 
-    def test_nine_supported_factsheet_metrics(self):
-        self.assertEqual(len(METRICS), 9)
-        self.assertEqual(len({key for key, _, _ in METRICS}), 9)
+    def test_six_factsheet_metrics_do_not_duplicate_headline_cards(self):
+        self.assertEqual(len(METRICS), 6)
+        self.assertEqual(len({key for key, _, _ in METRICS}), 6)
+        self.assertTrue({"net_profit_m", "cet1_ratio_pct", "lcr_pct"}.isdisjoint(
+            {key for key, _, _ in METRICS}
+        ))
         for key, _, unit in METRICS + EXTRA:
             self.assertIn(key, self.group.columns)
             self.assertIn(unit, {"€m", "%", "bps"})
@@ -82,13 +86,65 @@ class ReportedBriefTests(unittest.TestCase):
         state = build_reported_state("Wealth Management")
         self.assertEqual(len(_key_insights(state)), 3)
 
-    def test_news_is_explicitly_not_the_prototype_feed(self):
+    def test_news_reuses_existing_source_but_labels_prototype_status(self):
         code = Path("src/reported_brief.py").read_text(encoding="utf-8")
-        self.assertNotIn("load_news_signals", code)
+        self.assertIn("load_news_signals()", code)
+        self.assertIn("load_news_geo_impact()", code)
         self.assertNotIn("load_articles()", code)
-        self.assertIn("Synthetic news stories", code)
+        self.assertIn("prototype feed", code.lower())
+        self.assertIn("is-external rb-news-wide", code)
+        self.assertIn("rb-news-grid", code)
         self.assertIn("src.reported_brief", Path("src/real_data_mode.py").read_text(encoding="utf-8"))
-        self.assertTrue("source connection pending" in code)
+
+    def test_news_deduplication_ranking_from_existing_sources(self):
+        from unittest.mock import patch
+        news = pd.DataFrame([
+            {"news_id":"a","published_date":"2026-10-16","headline":"A",
+             "relevance_score":90},
+            {"news_id":"b","published_date":"2026-10-14","headline":"B",
+             "relevance_score":80},
+            {"news_id":"c","published_date":"2026-09-10","headline":"Old",
+             "relevance_score":99},
+        ])
+        geo = pd.DataFrame([
+            {"news_id":"a","country":"NL","geo_impact_score":10},
+            {"news_id":"a","country":"FR","geo_impact_score":5},
+            {"news_id":"b","country":"DE","geo_impact_score":8},
+            {"news_id":"c","country":"NL","geo_impact_score":9},
+        ])
+        with patch("src.reported_brief.load_news_signals", return_value=news):
+            with patch("src.reported_brief.load_news_geo_impact", return_value=geo):
+                selected = load_existing_news()
+        self.assertEqual(selected["news_id"].tolist(), ["a","b"])
+        self.assertEqual(selected.iloc[0]["country"], "NL")
+
+    def test_prototype_article_keeps_blue_feed_and_safe_links(self):
+        row = pd.Series({
+            "headline":"Market & credit","published_date":"2026-10-16",
+            "category":"Monetary Policy","source":"External source",
+            "source_url":"https://example.org/article",
+            "potential_impact_level":"HIGH",
+            "primary_affected_metric":"NIM",
+            "bank_impact_summary":"Prototype impact",
+            "confidence_score":0.95,
+        })
+        rendered = _prototype_article(row)
+        self.assertIn("feed-item", rendered)
+        self.assertIn("status-impact-high", rendered)
+        self.assertIn("https://example.org/article", rendered)
+        self.assertIn("Market &amp; credit", rendered)
+        self.assertIn("Prototype", rendered)
+        row["source_url"] = "javascript:alert(1)"
+        self.assertNotIn('href="javascript:', _prototype_article(row))
+
+    def test_visible_headline_trends_and_expand_collapse_behavior(self):
+        code = Path("src/reported_brief.py").read_text(encoding="utf-8")
+        self.assertIn("opacity: 1", code)
+        self.assertNotIn(".rb-hover-trend {display:none;}", code)
+        self.assertIn('st.session_state.pop("rb_focus", None)', code)
+        self.assertNotIn('elif st.session_state.get("rb_focus")', code)
+        self.assertIn('st.session_state["rb_expanded"] = True', code)
+
 
 
 if __name__ == "__main__":
