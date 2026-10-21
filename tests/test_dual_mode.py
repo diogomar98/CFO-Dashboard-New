@@ -72,7 +72,7 @@ class ReportedDataTests(unittest.TestCase):
         profit = cards["QUARTERLY NET PROFIT"]
         self.assertEqual(len(profit["trend_values"]), 10)
         self.assertIn("impairment", profit["why"])
-        self.assertIn("reconcile", profit["impact"].lower())
+        self.assertIn("bridge", profit["impact"].lower())
         nii = cards["NET INTEREST INCOME"]
         self.assertIn("NIM", nii["why"])
         self.assertIn("earning assets", nii["next"])
@@ -85,7 +85,7 @@ class ReportedDataTests(unittest.TestCase):
         for card in wm.kpi_cards:
             self.assertEqual(len(card["trend_values"]), 7)
             self.assertEqual(card["rag"]["status"], "NOT_ASSESSED")
-        self.assertIn("business-line", wm.kpi_cards[0]["next"].lower())
+        self.assertIn("composition", wm.kpi_cards[0]["next"].lower())
 
     def test_momentum_rag_is_not_regulatory_rating(self):
         self.assertEqual(_directional_rag([1, 2, 3])["status"], "GREEN")
