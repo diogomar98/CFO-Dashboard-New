@@ -377,10 +377,10 @@ def render_reported_module(module, s):
         return
 
     if module == "horizon":
-        st.markdown("#### Historical horizon | reported quarters")
-        st.write("The actuals can be trended, but the factsheet does not provide a forecast or the daily/monthly inputs used by the synthetic Horizon engine.")
-        _chart(group, ["nii_m", "net_profit_m"])
-        st.info("Forward projections are not calculated until a separate, explicitly assumption-based quarterly forecasting model is implemented.")
+        # Preserve the original Synthetic src/modules/horizon.py without changes.
+        # The separately governed quarterly engine operates on published actuals.
+        from src.reported_horizon import render_reported_horizon
+        render_reported_horizon(s)
         return
 
     if module == "treasury":
