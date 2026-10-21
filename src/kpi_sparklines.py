@@ -7,6 +7,55 @@ import html
 import math
 
 
+SPARKLINE_CSS = """
+<style>
+/* Scoped to real-data KPI cards; existing synthetic layout is unchanged. */
+.home-left .kpi-reading-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.35rem;
+    min-width: 0;
+}
+.home-left .kpi-reading-row > .kpi-value {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: clamp(1.24rem, 1.9vw, 1.92rem);
+    white-space: nowrap;
+}
+.home-left .kpi-sparkline {
+    flex: 0 0 91px;
+    width: 91px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0.05rem;
+    line-height: 1;
+}
+.home-left .kpi-sparkline svg {
+    display: block;
+    width: 91px;
+    max-width: 100%;
+    height: 31px;
+    overflow: visible;
+}
+.home-left .kpi-sparkline-period {
+    color: #78A787;
+    font-family: "Cascadia Mono", Consolas, monospace;
+    font-size: 0.51rem;
+    letter-spacing: 0.06em;
+    font-weight: 600;
+    white-space: nowrap;
+}
+@media (max-width: 1150px) and (min-width: 701px) {
+    .home-left .kpi-sparkline { flex-basis: 80px; width: 80px; }
+    .home-left .kpi-sparkline svg { width: 80px; }
+}
+</style>
+"""
+
+
 def sparkline_html(values, *, label="", period="quarters"):
     """Return a compact accessible SVG from genuine ordered observations.
 
