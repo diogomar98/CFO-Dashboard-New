@@ -93,3 +93,34 @@ Following the ABN screenshot review:
 Continue using the same two real quarterly CSVs and all existing Databricks settings.
 
 The bar+line sparkline is deliberately small and cannot reveal subtle ratio movements as prominently as a zoomed chart. Use the adjacent numerical QoQ delta for precise movements.
+
+## Stage 2 — Quarterly Morning Brief (21 October 2026)
+
+This iteration updates **Real Data / Morning Brief only**; the working Synthetic `src/modules/brief.py` is preserved unchanged.
+
+### Default: executive health check
+- Three source-backed Group headline cards: **quarterly net profit, CET1 ratio, LCR**, using the latest reported observation and QoQ movement.
+- Hover/focus over each card to reveal a compact bar chart plus trend line from observed quarters (no invented observations). Select **Inspect quarterly trend** to open the detailed section.
+- Three concise, source-specific CFO observations for profitability, capital and liquidity using existing Why/Impact context.
+- If a business line is selected, the three headline cards adapt to only the disclosed *segment* metrics: loans, deposits and RWA. Group-level profit, capital and liquidity are **not** misrepresented as segment-specific.
+
+### Expanded financial view
+- An optional **Expand financial view** toggle opens a 3×3 grid of *real* five-quarter charts in the existing dark/green cockpit:
+  - Profitability: Net profit, ROE, cost/income ratio.
+  - Capital/risk: CET1 ratio, RWA, cost of risk.
+  - Balance sheet/liquidity: customer loans, customer deposits, LCR.
+- Each tile includes its five quarter/year labels, exact-level tooltip, bar value, transparent previous-quarter bars and a highlighted latest quarter. The bars have an honest zero-including scale; cost of risk preserves negative values.
+- Clicking **Explore metric** reveals the metric's historical bar chart, QoQ/YoY comparison and a sourced values table. The four KPI metrics already covered by the main CFO explanations reuse their Why/Impact/Next narrative. No other causal explanation is invented.
+- Optional extra real Group metrics: NII, NIM, fee income, NSFR, total operating income and operating expenses.
+- Business-line expanded view shows the *three supported* segment metrics rather than an invented nine-metric grid.
+
+### News placement and source controls
+- **External news only**, below the financial overview. The existing Synthetic two-column Internal/External feed remains completely unchanged in Synthetic mode.
+- No verified real external feed has been connected yet. The Real Data news section explicitly explains this and displays **no sample headlines**, generated news or artificial bank-impact scores. External article integration is a later source/permission review.
+
+### Files to copy for ABN
+If the earlier dual-mode version is already running in a separate ABN Databricks test folder:
+1. **Add** `src/modules/reported_brief.py`.
+2. **Replace** `src/real_data_mode.py`.
+
+No changes to `main.py`, factsheet CSVs, deployment configuration, `requirements.txt`, `src/hud_css.py` or original synthetic modules for this iteration. Validate hover/focus, expansion, drilldowns, modal scrolling, Synthetic-mode regression and Group/segment filtering inside the actual workspace.
