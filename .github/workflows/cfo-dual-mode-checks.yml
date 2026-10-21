@@ -1,0 +1,28 @@
+name: CFO dual-mode checks
+
+on:
+  pull_request:
+    paths:
+      - "main.py"
+      - "src/hud.py"
+      - "src/rag.py"
+      - "src/real_data_mode.py"
+      - "data/abn_*.csv"
+      - "tests/test_dual_mode.py"
+      - ".github/workflows/cfo-dual-mode-checks.yml"
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install minimum runtime packages for source-only checks
+        run: python -m pip install "streamlit>=1.38" "pandas>=2.0"
+      - name: Compile changed Python and original entry point
+        run: python -m py_compile main.py src/hud.py src/rag.py src/real_data_mode.py
+      - name: Test reported schema, factsheet reconciliation, and mode links
+        run: python -m unittest discover -s tests -p "test_dual_mode.py" -v
