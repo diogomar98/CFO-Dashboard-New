@@ -150,6 +150,9 @@ def main():
       })
     with (OUT/"group_nii_nim_candidate_2021_2026.csv").open("w",newline="",encoding="utf-8") as file:
       writer=csv.DictWriter(file,fieldnames=list(series[0].keys()));writer.writeheader();writer.writerows(series)
+    # Machine-readable audit line for cross-tool review of exact, source-derived
+    # workbook values. Data are already included in the CSV artifact.
+    print("GROUP_QUARTER_SERIES_JSON "+json.dumps(series, separators=(",",":")), flush=True)
     checks=Counter(x["status"] for x in comparisons)
     issues=[x for x in comparisons if x["status"]!="PASS"]
     (OUT/"RECONCILIATION_SUMMARY.md").write_text(
