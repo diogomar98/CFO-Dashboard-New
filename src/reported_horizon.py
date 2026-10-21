@@ -106,7 +106,7 @@ def _forecast_chart(history, metric="nim_pct", history_points=12, bands="Both"):
         labelColor="#A7C5B0",titleColor="#A7C5B0",gridColor="#203A28",
         labelFontSize=10,
     ))
-    layers=None
+    band_layers=[]
     for level,opacity in ((95,0.10),(90,0.22)):
         if bands!="Both" and bands!=str(level)+"%":
             continue
@@ -122,7 +122,7 @@ def _forecast_chart(history, metric="nim_pct", history_points=12, bands="Both"):
             alt.Tooltip(f"{low}:Q",title=f"{level}% lower",format=fmt),
             alt.Tooltip(f"{high}:Q",title=f"{level}% upper",format=fmt),
         ])
-        layers=area if layers is None else layers+area
+        band_layers.append(area)
 
     actual_tooltips=[
         alt.Tooltip("quarter:N",title="Reported quarter"),
@@ -145,9 +145,9 @@ def _forecast_chart(history, metric="nim_pct", history_points=12, bands="Both"):
     dots2=alt.Chart(projected).mark_point(
         filled=True,color="#110C17",stroke="#CFB9FF",strokeWidth=2,size=72
     ).encode(x=x,y=y,tooltip=future_tooltips)
-    chart=line1+dots1+line2+dots2
-    if layers is not None:
-        chart=layers+chart
+    # Use a FLAT layer list: this avoids nested Vega-Lite layers and makes
+    # both 90/95 confidence bands independently inspectable.
+    chart=alt.layer(*(band_layers+[line1,dots1,line2,dots2]))
     return chart.properties(height=350).configure_view(
         strokeOpacity=0
     ).configure(background="#08100C")
