@@ -11,27 +11,30 @@ import streamlit as st
 from src.hud import render_html
 from src.kpi_sparklines import sparkline_html
 from src.real_data_mode import _quarter
+from src.extended_data_loader import load_news_signals, load_news_geo_impact
+from src.rag import confidence_badge, confidence_probability
+from urllib.parse import urlsplit
 
 # The grid mirrors the supplied 'Figures at a glance' reference, with the
 # bank's own verified statement lines and ratio units instead of guesses.
+# Six indicators intentionally differ from Group's three headline metrics
+# (net profit, CET1 and LCR). Every field is sourced from the factsheet CSV.
 METRICS = (
-    ("net_profit_m", "Net profit", "€m"),
     ("roe_pct", "Return on equity", "%"),
-    ("cost_income_ratio_pct", "Cost / income", "%"),
-    ("cet1_ratio_pct", "CET1 ratio", "%"),
+    ("cost_income_ratio_pct", "Cost / income ratio", "%"),
+    ("nim_bps", "Net interest margin", "bps"),
     ("rwa_m", "Risk-weighted assets", "€m"),
-    ("cost_of_risk_bps", "Cost of risk", "bps"),
     ("loans_m", "Customer loans", "€m"),
     ("deposits_m", "Customer deposits", "€m"),
-    ("lcr_pct", "Liquidity coverage", "%"),
 )
 EXTRA = (
     ("nii_m", "Net interest income", "€m"),
-    ("nim_bps", "Net interest margin", "bps"),
     ("net_fee_income_m", "Net fee income", "€m"),
     ("nsfr_pct", "Net stable funding ratio", "%"),
     ("operating_income_m", "Operating income", "€m"),
     ("operating_expenses_m", "Operating expenses", "€m"),
+    ("cost_of_risk_bps", "Cost of risk", "bps"),
+    ("financial_investments_m", "Financial investments", "€m"),
 )
 SEGMENT_METRICS = (
     ("loans_m", "Customer loans", "€m"),
@@ -84,10 +87,9 @@ BRIEF_CSS = """
 .rb-primary-help { margin-top: 0.3rem; color: #698D75; font-size: 0.6rem; }
 .rb-hover-trend {
     width: 126px;
-    opacity: 0;
-    transform: translateY(4px);
-    transition: opacity 170ms ease, transform 170ms ease;
-    pointer-events: none;
+    opacity: 1;
+    transform: none;
+    pointer-events: auto;
 }
 .rb-primary:hover .rb-hover-trend, .rb-primary:focus-visible .rb-hover-trend {
     opacity: 1; transform: none;
@@ -163,8 +165,10 @@ BRIEF_CSS = """
 .rb-news-note { font-size:.7rem;color:#97AFB2;line-height:1.55; margin-top:.3rem; }
 @media (max-width:1000px){
     .rb-primary {height:175px;padding:.7rem;}
-    .rb-primary-reading {display:block;}
-    .rb-hover-trend {display:none;}
+    .rb-primary-reading {display:flex;align-items:center;}
+    .rb-hover-trend {display:block;width:116px;flex:0 0 116px;}
+    .rb-primary-value {font-size:clamp(1.15rem,2.5vw,1.75rem);}
+
 }
 </style>
 """
@@ -278,7 +282,7 @@ def _primary_card(title, value, comparison, dates, values, detail):
         f'<span class="rb-hover-trend">{chart}</span>'
         '</div>'
         f'<span class="rb-primary-delta">{html.escape(comparison)} QoQ</span>'
-        f'<div class="rb-primary-help">{html.escape(detail)} · hover for reported trend</div>'
+        f'<div class="rb-primary-help">{html.escape(detail)} · reported quarterly trend</div>'
         '</div>'
     )
 
@@ -332,6 +336,7 @@ def _primary_cards(s, data):
                 use_container_width=True,
             ):
                 st.session_state["rb_focus"] = metric
+                st.session_state["rb_expanded"] = True
 
 
 def _details(frame, key, unit, name, s):
@@ -392,9 +397,20 @@ def _details(frame, key, unit, name, s):
 
 
 def _expanded_grid(s, frame):
-    metrics = SEGMENT_METRICS if s.business_line else METRICS
+    metrics = () if s.business_line else METRICS
     st.markdown("### Figures at a glance")
-    st.caption("Last five reported quarters · bar heights include zero · latest observation highlighted")
+    if s.business_line:
+        st.info(
+            "Only segment loans, deposits and RWA are disclosed in this data package "
+            "and those are already shown above. Use the headline cards' Inspect "
+            "quarterly trend action for the complete segment history; additional "
+            "segment KPIs have not been invented."
+        )
+    else:
+        st.caption(
+            "Six additional KPIs · last five reported quarters · "
+            "bar heights include zero · latest quarter highlighted"
+        )
 
     for start in range(0, len(metrics), 3):
         cols = st.columns(3, gap="medium")
@@ -415,6 +431,14 @@ def _expanded_grid(s, frame):
 
     focus = st.session_state.get("rb_focus")
     available = {metric: (name, unit) for metric, name, unit in metrics}
+    if s.business_line:
+        available.update({metric: (name, unit) for metric, name, unit in SEGMENT_METRICS})
+    else:
+        available.update({
+            "net_profit_m": ("Net profit", "€m"),
+            "cet1_ratio_pct": ("CET1 ratio", "%"),
+            "lcr_pct": ("Liquidity coverage", "%"),
+        })
     if not s.business_line:
         available.update({metric: (name, unit) for metric, name, unit in EXTRA})
     if focus in available:
@@ -467,11 +491,11 @@ def render_reported_brief(s):
         key="rb_toggle_expanded", use_container_width=True,
     ):
         st.session_state["rb_expanded"] = not open_now
+        if open_now:
+            # Close the detail as well: an old focus must not re-open the
+            # financial grid immediately after pressing Collapse.
+            st.session_state.pop("rb_focus", None)
     if st.session_state.get("rb_expanded", False):
-        _expanded_grid(s, frame)
-    elif st.session_state.get("rb_focus"):
-        # Selecting a primary KPI expands automatically to display its analysis.
-        st.session_state["rb_expanded"] = True
         _expanded_grid(s, frame)
 
     render_html('<div class="rb-section-break"></div>')
