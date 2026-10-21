@@ -1,0 +1,479 @@
+"""Quarterly, factsheet-only Morning Brief for the existing dual-mode cockpit.
+
+Reuses the existing Streamlit dialog, never calls synthetic views or news
+fixtures, and never presents a projected result as an actual observation.
+"""
+import html
+
+import pandas as pd
+import streamlit as st
+
+from src.hud import render_html
+from src.kpi_sparklines import sparkline_html
+from src.real_data_mode import _quarter
+
+# The grid mirrors the supplied 'Figures at a glance' reference, with the
+# bank's own verified statement lines and ratio units instead of guesses.
+METRICS = (
+    ("net_profit_m", "Net profit", "€m"),
+    ("roe_pct", "Return on equity", "%"),
+    ("cost_income_ratio_pct", "Cost / income", "%"),
+    ("cet1_ratio_pct", "CET1 ratio", "%"),
+    ("rwa_m", "Risk-weighted assets", "€m"),
+    ("cost_of_risk_bps", "Cost of risk", "bps"),
+    ("loans_m", "Customer loans", "€m"),
+    ("deposits_m", "Customer deposits", "€m"),
+    ("lcr_pct", "Liquidity coverage", "%"),
+)
+EXTRA = (
+    ("nii_m", "Net interest income", "€m"),
+    ("nim_bps", "Net interest margin", "bps"),
+    ("net_fee_income_m", "Net fee income", "€m"),
+    ("nsfr_pct", "Net stable funding ratio", "%"),
+    ("operating_income_m", "Operating income", "€m"),
+    ("operating_expenses_m", "Operating expenses", "€m"),
+)
+SEGMENT_METRICS = (
+    ("loans_m", "Customer loans", "€m"),
+    ("deposits_m", "Customer deposits", "€m"),
+    ("rwa_m", "Risk-weighted assets", "€m"),
+)
+DEFS = {key: (name, unit) for key, name, unit in METRICS + EXTRA}
+
+
+BRIEF_CSS = """
+<style>
+.rb-head {
+    margin: 0.15rem 0 0.7rem;
+    font-family: "Cascadia Mono", Consolas, monospace;
+    font-size: 0.66rem;
+    color: #74B58A;
+    letter-spacing: .10em;
+    text-transform: uppercase;
+}
+.rb-primary {
+    position: relative;
+    height: 158px;
+    padding: 1rem 1.05rem 0.8rem;
+    border: 1px solid rgba(86,160,106,0.29);
+    background: linear-gradient(145deg, rgba(18,30,22,0.96), rgba(7,15,10,0.96));
+    border-radius: 0;
+    box-sizing: border-box;
+    overflow: visible;
+    transition: border-color 170ms ease, background 170ms ease;
+}
+.rb-primary:hover, .rb-primary:focus-visible {
+    border-color: rgba(95,204,130,0.71);
+    background: rgba(20,38,25,0.95);
+}
+.rb-primary-label {
+    display: block; color: #92B99D; font-size: 0.68rem;
+    font-weight: 750; letter-spacing: .075em; text-transform: uppercase;
+}
+.rb-primary-reading { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; }
+.rb-primary-value {
+    color: #EEF9F0; font-family: "Cascadia Mono",Consolas,monospace;
+    font-size: clamp(1.5rem, 2vw, 2.1rem); font-weight: 700;
+    white-space: nowrap;
+}
+.rb-primary-delta {
+    display: block; margin-top: 0.25rem;
+    color: #B8D6C0; font-family: "Cascadia Mono",Consolas,monospace;
+    font-size: 0.67rem;
+}
+.rb-primary-help { margin-top: 0.3rem; color: #698D75; font-size: 0.6rem; }
+.rb-hover-trend {
+    width: 126px;
+    opacity: 0;
+    transform: translateY(4px);
+    transition: opacity 170ms ease, transform 170ms ease;
+    pointer-events: none;
+}
+.rb-primary:hover .rb-hover-trend, .rb-primary:focus-visible .rb-hover-trend {
+    opacity: 1; transform: none;
+}
+.rb-hover-trend .kpi-sparkline { width: 116px; display: flex; flex-direction: column; align-items: center; gap:2px; }
+.rb-hover-trend .kpi-mini-plot {
+    position:relative; display:block; width:116px; height:42px;
+    transform:none; margin:0; overflow:hidden;
+    border-bottom:1px solid rgba(96,146,106,.18);
+}
+.rb-hover-trend .kpi-mini-bar {
+    position:absolute;display:block;box-sizing:border-box;
+    background:linear-gradient(180deg,rgba(93,183,119,.27),rgba(37,108,66,.10));
+    border:1px solid rgba(82,166,104,.15);border-bottom:0;
+}
+.rb-hover-trend .kpi-mini-bar.is-latest {background:rgba(78,200,111,.47);}
+.rb-hover-trend .kpi-mini-segment {
+    position:absolute;display:block;height:2px;background:rgba(188,243,204,.75);
+    transform-origin:left center;z-index:2;
+}
+.rb-hover-trend .kpi-mini-dot {
+    position:absolute;display:block;width:5px;height:5px;
+    border-radius:50%;box-sizing:border-box;
+    background:rgba(188,243,204,.75);border:1px solid #32744A;z-index:3;
+}
+.rb-hover-trend .kpi-mini-dot.is-latest {width:6px;height:6px;background:#C3F2D1;}
+.rb-hover-trend .kpi-sparkline-period {
+    display:flex;justify-content:space-between;width:116px;
+    color:#8ABA98;font-size:.51rem;font-family:"Cascadia Mono",Consolas,monospace;
+}
+.rb-commentary { padding: 0.8rem 1rem; background: rgba(31,63,38,0.10); border-left: 2px solid #3D9961; }
+.rb-commentary-line { margin: .35rem 0; color:#D0E1D2; font-size:.82rem; line-height:1.46; }
+.rb-plot-card {
+    padding: 0.8rem .9rem .65rem;
+    background: rgba(14,28,19,0.78);
+    border: 1px solid rgba(71,125,82,0.25);
+    box-sizing: border-box;
+    height: 218px;
+    border-radius: 0;
+}
+.rb-plot-head { display:flex; justify-content:space-between; align-items:baseline; gap:.4rem; }
+.rb-plot-name { font-size:.76rem; font-weight:750; color:#C9E3CE; }
+.rb-plot-unit { font-size:.58rem; color:#78A989; white-space:nowrap; }
+.rb-plot {
+    height: 130px; position: relative;
+    margin: .55rem 0 .1rem;
+    padding-bottom: 1px;
+    border-bottom: 1px solid rgba(105,168,119,0.27);
+}
+.rb-plot-baseline { height:1px; background:rgba(145,177,153,.32); position:absolute;left:0;right:0; }
+.rb-col { position:absolute;top:0;bottom:0; }
+.rb-bar {
+    position:absolute; width:60%; left:20%;
+    background: rgba(79,188,115,0.28);
+    border:1px solid rgba(116,209,141,0.22);
+    box-sizing:border-box;
+}
+.rb-bar.is-latest {background:rgba(62,206,110,0.58);border-color:rgba(114,229,151,0.63);}
+.rb-bar-value {
+    display:block;position:absolute;left:-45%;width:190%;text-align:center;
+    font-family:"Cascadia Mono",Consolas,monospace;
+    color:#C6DFCC; font-size:.55rem; white-space:nowrap;
+}
+.rb-col.is-latest .rb-bar-value {color:#A1F2BA;font-weight:750;}
+.rb-bar-date {
+    position:absolute;bottom:-17px;left:-28%;width:156%;
+    text-align:center; font-size:.53rem;color:#8CAF98; white-space:nowrap;
+}
+.rb-chart-caption {font-size:.56rem;color:#648670;}
+.rb-section-break { margin:1.1rem 0 .6rem; border-top:1px solid rgba(95,165,112,.20);padding-top:.7rem; }
+.rb-news-frame { padding:1rem 1.1rem; border:1px solid rgba(82,125,155,.30);background:rgba(15,25,29,.60); }
+.rb-news-head { font-size:.76rem;color:#BBD4DB;font-weight:700; }
+.rb-news-note { font-size:.7rem;color:#97AFB2;line-height:1.55; margin-top:.3rem; }
+@media (max-width:1000px){
+    .rb-primary {height:175px;padding:.7rem;}
+    .rb-primary-reading {display:block;}
+    .rb-hover-trend {display:none;}
+}
+</style>
+"""
+
+
+def chart_rows(frame, metric, quarters=5):
+    """Five latest *non-null* reported quarters; no synthetic interpolation."""
+    if metric not in frame:
+        return []
+    clean = frame[["date", metric]].dropna().sort_values("date").tail(quarters)
+    return [(_quarter(row["date"]), float(row[metric])) for _, row in clean.iterrows()]
+
+
+def compare_actuals(frame, metric):
+    """Latest actual, prior-quarter actual and same-quarter last year, if present."""
+    clean = frame[["date", metric]].dropna().sort_values("date")
+    if clean.empty:
+        return None
+    latest = clean.iloc[-1]
+    # Quarter comparisons use accounting periods rather than subtracting
+    # calendar months (30 June - 3 months is 30 March, not 31 March).
+    current_quarter = pd.Timestamp(latest["date"]).to_period("Q")
+    quarters = clean["date"].dt.to_period("Q")
+    earlier = clean.loc[quarters == current_quarter - 1]
+    year_ago = clean.loc[quarters == current_quarter - 4]
+    return {
+        "quarter": _quarter(latest["date"]),
+        "now": float(latest[metric]),
+        "previous": float(earlier.iloc[0][metric]) if not earlier.empty else None,
+        "year_ago": float(year_ago.iloc[0][metric]) if not year_ago.empty else None,
+    }
+
+
+def _amount(value, unit, rounded=False):
+    if value is None or pd.isna(value):
+        return "—"
+    if unit == "€m":
+        return f"€{value:,.0f}m" if rounded else f"€{value:,.1f}m"
+    if unit == "%":
+        return f"{value:.2f}%"
+    return f"{value:.1f}bps"
+
+
+def _delta(value, prev, unit):
+    if prev is None or pd.isna(prev):
+        return "Prior period unavailable"
+    change = value - prev
+    suffix = "pp" if unit == "%" else ("bps" if unit == "bps" else "m")
+    if suffix == "m":
+        return f"{change:+,.1f}m"
+    return f"{change:+.2f}{suffix}"
+
+
+def _metric_bar_chart(rows, name, unit):
+    """Accessible HTML/CSS five-quarter bars with a zero-including y-axis."""
+    if len(rows) < 1:
+        return '<div class="rb-plot-card">No reported values available.</div>'
+    observed = [v for _, v in rows]
+    lo, hi = min(0.0, *observed), max(0.0, *observed)
+    if lo == hi:
+        hi = lo + 1.0
+    pad = (hi - lo) * 0.075
+    lo = lo - pad if lo < 0 else lo
+    hi = hi + pad if hi > 0 else hi
+    span = hi - lo
+    baseline_pct = 100 * hi / span  # measured from top of plot
+    cols = []
+    n = len(rows)
+    for idx, (quarter, val) in enumerate(rows):
+        # y is measured downward from chart top.
+        y_pct = 100 * (hi - val) / span
+        top_pct = min(y_pct, baseline_pct)
+        h_pct = max(0.5, abs(baseline_pct - y_pct))
+        x_pct = 100 * idx / n
+        col_w = 100 / n
+        latest_class = " is-latest" if idx == n - 1 else ""
+        # value label sits near the top of each bar, but never above the plot.
+        label_top = max(1.0, top_pct - 13.0) if val >= 0 else min(86.0, baseline_pct + h_pct + 2.0)
+        quarter_short = html.escape(quarter.replace(" 20", " '"))
+        value_label = html.escape(_amount(val, unit, rounded=True))
+        tooltip = html.escape(f"{quarter}: {_amount(val, unit)}", quote=True)
+        cols.append(
+            f'<div class="rb-col{latest_class}" title="{tooltip}" '
+            f'style="left:{x_pct:.3f}%;width:{col_w:.3f}%">'
+            f'<span class="rb-bar{latest_class}" '
+            f'style="top:{top_pct:.3f}%;height:{h_pct:.3f}%"></span>'
+            f'<span class="rb-bar-value" style="top:{label_top:.3f}%">{value_label}</span>'
+            f'<span class="rb-bar-date">{quarter_short}</span>'
+            '</div>'
+        )
+    safe_name = html.escape(name)
+    return (
+        '<div class="rb-plot-card">'
+        f'<div class="rb-plot-head"><span class="rb-plot-name">{safe_name}</span>'
+        f'<span class="rb-plot-unit">{html.escape(unit)}</span></div>'
+        f'<div class="rb-plot" role="img" aria-label="{safe_name}: '
+        f'{len(rows)} reported quarters, latest {_amount(observed[-1], unit)}">'
+        f'<span class="rb-plot-baseline" style="top:{baseline_pct:.3f}%"></span>'
+        + "".join(cols)
+        + '</div></div>'
+    )
+
+
+def _primary_card(title, value, comparison, dates, values, detail):
+    chart = sparkline_html(values, label=title, dates=dates)
+    return (
+        '<div class="rb-primary" tabindex="0">'
+        f'<span class="rb-primary-label">{html.escape(title)}</span>'
+        '<div class="rb-primary-reading">'
+        f'<span class="rb-primary-value">{html.escape(value)}</span>'
+        f'<span class="rb-hover-trend">{chart}</span>'
+        '</div>'
+        f'<span class="rb-primary-delta">{html.escape(comparison)} QoQ</span>'
+        f'<div class="rb-primary-help">{html.escape(detail)} · hover for reported trend</div>'
+        '</div>'
+    )
+
+
+def _key_insights(s):
+    """Derived descriptions only from actual source-backed card narratives."""
+    if s.business_line:
+        return [
+            f"{card['label'].title()}: {card['context']}"
+            for card in s.kpi_cards[:3]
+        ]
+    by_label = {card["label"]: card for card in s.kpi_cards}
+    return [
+        "Profitability: " + by_label["QUARTERLY NET PROFIT"]["why"],
+        "Capital: " + by_label["CET1 RATIO"]["why"],
+        "Liquidity: " + by_label["LIQUIDITY COVERAGE"]["why"],
+    ]
+
+
+def _primary_cards(s, data):
+    if s.business_line:
+        headline = (
+            ("loans_m", "Customer loans", "€m"),
+            ("deposits_m", "Customer deposits", "€m"),
+            ("rwa_m", "Risk-weighted assets", "€m"),
+        )
+    else:
+        headline = (
+            ("net_profit_m", "Net profit", "€m"),
+            ("cet1_ratio_pct", "CET1 ratio", "%"),
+            ("lcr_pct", "Liquidity coverage", "%"),
+        )
+    cols = st.columns(3, gap="medium")
+    for col, (metric, name, unit) in zip(cols, headline):
+        history = chart_rows(data, metric, quarters=10)
+        stat = compare_actuals(data, metric)
+        with col:
+            if stat is None:
+                st.caption("Not reported")
+                continue
+            summary = _amount(stat["now"], unit, rounded=True)
+            values = [v for _, v in history]
+            dates = [d for d, _ in history]
+            render_html(_primary_card(
+                name, summary, _delta(stat["now"], stat["previous"], unit),
+                dates, values,
+                "Selected business line" if s.business_line else "ABN AMRO Group",
+            ))
+            if st.button(
+                "Inspect quarterly trend ↗", key=f"rb_primary_{metric}",
+                use_container_width=True,
+            ):
+                st.session_state["rb_focus"] = metric
+
+
+def _details(frame, key, unit, name, s):
+    stat = compare_actuals(frame, key)
+    if stat is None:
+        st.info("No source-backed data available for this metric.")
+        return
+    st.markdown(f"#### {name} · historical drilldown")
+    st.caption(f"{stat['quarter']} · Actual reported figures, not estimated or forecast")
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.metric("Reported actual", _amount(stat["now"], unit))
+    with c2:
+        st.metric("Change QoQ", _delta(stat["now"], stat["previous"], unit))
+    with c3:
+        st.metric("Change YoY", _delta(stat["now"], stat["year_ago"], unit))
+
+    hist = frame[["date", key]].dropna().sort_values("date")
+    chart_data = hist.set_index("date")[key]
+    st.bar_chart(chart_data, use_container_width=True, height=230)
+    table = hist.copy()
+    table["quarter"] = table["date"].map(_quarter)
+    table["value"] = table[key].map(lambda x: _amount(x, unit))
+    table["QoQ"] = table[key].diff().map(lambda v: _delta(v, 0, unit) if pd.notna(v) else "—")
+    table["YoY"] = (table[key] - table[key].shift(4)).map(
+        lambda v: _delta(v, 0, unit) if pd.notna(v) else "—"
+    )
+    st.dataframe(
+        table[["quarter", "value", "QoQ", "YoY"]].iloc[::-1],
+        hide_index=True, use_container_width=True,
+    )
+
+    # Reuse the existing CFO explanations only for the matching Group KPI,
+    # rather than fabricating attribution for other reported series.
+    kpi_by_field = {
+        "net_profit_m": "QUARTERLY NET PROFIT",
+        "cet1_ratio_pct": "CET1 RATIO",
+        "lcr_pct": "LIQUIDITY COVERAGE",
+        "nii_m": "NET INTEREST INCOME",
+    }
+    if not s.business_line and key in kpi_by_field:
+        match = next(
+            (card for card in s.kpi_cards if card["label"] == kpi_by_field[key]), None
+        )
+        if match:
+            st.markdown("**Why**")
+            st.write(match["why"])
+            st.markdown("**Impact**")
+            st.write(match["impact"])
+            st.markdown("**Next**")
+            st.write(match["next"])
+            return
+    st.caption(
+        "This analysis is limited to sourced quarterly levels and their calculated "
+        "QoQ/YoY movements. Causal attribution and management thresholds are "
+        "not inferred from the factsheet."
+    )
+
+
+def _expanded_grid(s, frame):
+    metrics = SEGMENT_METRICS if s.business_line else METRICS
+    st.markdown("### Figures at a glance")
+    st.caption("Last five reported quarters · bar heights include zero · latest observation highlighted")
+
+    for start in range(0, len(metrics), 3):
+        cols = st.columns(3, gap="medium")
+        for col, (metric, name, unit) in zip(cols, metrics[start:start + 3]):
+            with col:
+                render_html(_metric_bar_chart(chart_rows(frame, metric), name, unit))
+                if st.button("Explore metric ↗", key=f"rb_grid_{metric}", use_container_width=True):
+                    st.session_state["rb_focus"] = metric
+    if not s.business_line:
+        options = {f"{name} ({unit})": key for key, name, unit in EXTRA}
+        picked = st.selectbox(
+            "Explore another reported financial metric",
+            ["Select metric"] + list(options), key="rb_extra_metric",
+        )
+        if picked != "Select metric":
+            if st.button("Open selected metric ↗", key="rb_select_extra"):
+                st.session_state["rb_focus"] = options[picked]
+
+    focus = st.session_state.get("rb_focus")
+    available = {metric: (name, unit) for metric, name, unit in metrics}
+    if not s.business_line:
+        available.update({metric: (name, unit) for metric, name, unit in EXTRA})
+    if focus in available:
+        name, unit = available[focus]
+        st.markdown('<div class="rb-section-break"></div>', unsafe_allow_html=True)
+        if st.button("Close detailed analysis ×", key="rb_detail_close"):
+            st.session_state.pop("rb_focus", None)
+        else:
+            _details(frame, focus, unit, name, s)
+
+
+def _external_news():
+    st.markdown("### External news & developments")
+    render_html(
+        '<div class="rb-news-frame">'
+        '<div class="rb-news-head">Verified external news · source connection pending</div>'
+        '<div class="rb-news-note">'
+        'The news section is retained below the financial overview, using '
+        'the existing cockpit layout. No external source has been connected '
+        'for Real Data mode yet. Synthetic news stories and prototype '
+        'impact classifications are deliberately excluded.'
+        '</div></div>'
+    )
+
+
+def render_reported_brief(s):
+    """Top three KPIs → commentary → optional expanded charts → external news."""
+    render_html(BRIEF_CSS)
+    frame = (
+        s.reported_segments.loc[
+            s.reported_segments["business_line"] == s.business_line
+        ].sort_values("date")
+        if s.business_line else s.reported_group
+    )
+    scope = s.business_line or "ABN AMRO Group"
+    latest = frame.iloc[-1]
+    render_html(
+        '<div class="rb-head">Executive health check / '
+        + html.escape(scope) + " / " + _quarter(latest["date"]) + '</div>'
+    )
+    _primary_cards(s, frame)
+    st.markdown("#### Executive commentary")
+    for sentence in _key_insights(s):
+        st.write("• " + sentence)
+    st.caption("Figures are quarterly reported actuals. Momentum signals are not bank-approved RAG thresholds.")
+
+    open_now = st.session_state.get("rb_expanded", False)
+    if st.button(
+        "Collapse financial view ▲" if open_now else "Expand financial view ▼",
+        key="rb_toggle_expanded", use_container_width=True,
+    ):
+        st.session_state["rb_expanded"] = not open_now
+    if st.session_state.get("rb_expanded", False):
+        _expanded_grid(s, frame)
+    elif st.session_state.get("rb_focus"):
+        # Selecting a primary KPI expands automatically to display its analysis.
+        st.session_state["rb_expanded"] = True
+        _expanded_grid(s, frame)
+
+    render_html('<div class="rb-section-break"></div>')
+    _external_news()
+    st.caption("Source: ABN AMRO Q2 2026 factsheet · Quarterly P&L and quarter-end balances.")
