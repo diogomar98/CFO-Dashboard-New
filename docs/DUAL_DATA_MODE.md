@@ -124,3 +124,15 @@ If the earlier dual-mode version is already running in a separate ABN Databricks
 2. **Replace** `src/real_data_mode.py`.
 
 No changes to `main.py`, factsheet CSVs, deployment configuration, `requirements.txt`, `src/hud_css.py` or original synthetic modules for this iteration. Validate hover/focus, expansion, drilldowns, modal scrolling, Synthetic-mode regression and Group/segment filtering inside the actual workspace.
+
+## Stage 2.1 — Morning Brief usability and news alignment (21 October 2026)
+
+Following the ABN screenshots:
+- The three headline real-financial cards (profit, CET1, LCR) **always** display their historical mini bar-and-line charts. Hover is no longer required, and the chart remains visible at narrow dialog widths.
+- The same **Expand/Collapse financial view** button now closes the view and clears the selected metric drilldown. Clicking a primary-card "Inspect quarterly trend" button opens the expanded view.
+- Group's expanded grid has **six**, not nine, five-quarter metrics distinct from the headline cards: ROE, cost/income ratio, NIM, RWA, customer loans and customer deposits. Other supported metrics remain selectable for an individual historical drilldown.
+- For selected business lines, the factsheet extract has only loans, deposits and RWA; the expanded panel avoids a duplicate three-chart grid and keeps their detailed historical drilldown available via the top cards.
+- The external-news section below the financial review now reuses the **same** `news_signals.csv` / `news_geo_impact.csv` sources, 13-day source-relative recency, ranking and four items as the original Synthetic Morning Brief. It reuses the blue `feed-frame is-external`, coloured impact badges, confidence badge, headline, source links and original content structure, arranged in a responsive two-column layout across the wider Morning Brief modal.
+- **Provenance safeguard:** those news rows and model-derived impact/confidence classifications are explicitly labelled **prototype / illustrative** in Real Data mode. They are *not* verified against the ABN AMRO fact sheet, and this is not a live news API. If existing prototype CSVs are absent, the news section shows an informative empty state instead of fabricating headlines.
+
+**ABN copy/paste:** replace only `src/reported_brief.py` in the existing dual-mode workspace. The original synthetic renderer, deployed `main.py`, `src/hud_css.py`, `src/real_data_mode.py`, both financial CSVs, requirements and Databricks settings remain unchanged. To display original news rows, retain the existing `data/news_signals.csv` and `data/news_geo_impact.csv` files from the working Synthetic mode.
