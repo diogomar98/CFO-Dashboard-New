@@ -16,7 +16,7 @@ _DATA_DIR = Path(__file__).resolve().parents[1] / "data"
 _SOURCE = "ABN AMRO Q2 2026 Factsheet (uploaded workbook)"
 _FIELDS = ("loans_m", "deposits_m", "rwa_m")
 _NEUTRAL = rag_from_status("NOT_ASSESSED", "Reported observation; no management threshold supplied")
-_UNAVAILABLE = rag_from_status("NOT_ASSESSED", "This analysis is not supported by the quarterly factsheet")
+_UNAVAILABLE = rag_from_status("UNAVAILABLE", "This analysis is not supported by the quarterly factsheet")
 
 
 def _quarter(date):
