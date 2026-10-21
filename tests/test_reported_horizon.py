@@ -125,13 +125,16 @@ class ReportedHorizonTests(unittest.TestCase):
     def test_existing_chart_style_and_explanatory_disclaimer(self):
         a=default_quarterly_assumptions(self.group)
         path, summary = build_quarterly_horizon(self.group,a)
-        chart = _forecast_chart(path,metric="nim_pct")
-        spec=chart.to_dict()
-        self.assertEqual(len(spec["layer"]),4)
-        text = _lens(path,summary)
+        from src.public_horizon_engine import load_public_horizon_inputs, build_public_horizon
+        public = load_public_horizon_inputs(self.group)
+        public_path, public_model = build_public_horizon(public)
+        chart = _forecast_chart(public_path,metric="nim_pct")
+        spec = chart.to_dict()
+        self.assertEqual(len(spec["layer"]),6)
+        text = _lens(public_path, public_model)
         self.assertIn("No calibrated statistical confidence",text)
         self.assertIn("not contained in the source package",text)
-        self.assertIn("reported NIM", text)
+        self.assertIn("Historical evidence", text)
         source = Path("src/reported_horizon.py").read_text(encoding="utf-8")
         self.assertIn("Where are we heading?",source)
         # Real Data KPI numbers should retain the strong Synthetic hierarchy.
@@ -139,7 +142,7 @@ class ReportedHorizonTests(unittest.TestCase):
         self.assertIn("font-weight:800;color:#E7FFE9", source)
         self.assertIn("rh-metric::before", source)
         self.assertIn("Forward trajectory / actual",source)
-        self.assertIn("Balance-sheet run-rate",source)
+        self.assertIn("ECB deposit facility rate",source)
         self.assertIn("from src.reported_horizon import render_reported_horizon",
                       Path("src/real_data_mode.py").read_text(encoding="utf-8"))
         synthetic=Path("src/modules/horizon.py").read_text(encoding="utf-8")
