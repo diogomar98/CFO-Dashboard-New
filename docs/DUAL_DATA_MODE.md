@@ -164,3 +164,33 @@ If you already have the working dual-mode app and Stage 2.1 Morning Brief instal
 Do **not** copy/replace `src/modules/horizon.py`, `src/engines.py`, existing Synthetic data generators, `main.py`, `src/hud_css.py` or financial/news CSVs. The existing `requirements.txt` and `app.yaml.txt` are unchanged. The UI uses Altair, already imported by the working Synthetic Horizon via `src/charts.py`; no new runtime dependency is added to the deployed app.
 
 The non-ABN GitHub checks include source reconciliation, quarter-end dates, Q2 2026 actuals, explicit forecast provenance, NIM momentum decay, independent NII assumptions, full-year NII actual/projected split, safe failure on invalid inputs, Altair chart generation and preserved Synthetic route. **A workspace UI smoke test is still required** for modal sizing, forms, navigation, and changing assumptions before merge.
+
+## Stage 3.1 — Real Data Horizon, 2021-on public series and forecast ranges
+
+**Scope:** Real Data Horizon only. The Synthetic Horizon, its monthly engines, synthetic source CSVs and complete home/dashboard/brief navigation remain untouched. This stage **supersedes the Stage 3 Real Horizon assumptions panel**; Stage 3's `src/reported_horizon_engine.py` remains in GitHub for legacy test coverage but is not used by Real Horizon.
+
+### Public source trail
+
+- **ABN Group:** `data/abn_group_nii_nim_2021_public.csv` — **22 consecutive quarters** Q1 2021–Q2 2026, NII EUR million and NIM basis points from the official public XLSX factsheets; per-row source document URL and exact Group sheet/cell. Validated by independently comparing all 21 adjacent-quarter source workbook pairs for NII and NIM plus selected ABN press releases and both Q4 2021 reporting-structure workbooks: **49/49 checks passed**. Original source evidence: https://github.com/diogomar98/CFO-Dashboard-New/actions/runs/39640848529/artifacts/12365272432.
+- **ECB DFR:** `data/ecb_dfr_quarterly_2021_public.csv` — **22 matching quarters**, calendar-day-weighted average and quarter-end policy rate, reconstructed from official ECB *rate-change observations*. Original dated ECB CSV URL and SHA-256 recorded on every output row; supporting retrieval code `research/build_ecb_dfr_quarters.py`.
+- Each app load rechecks exact quarter continuity, non-null levels, source domains and whether Q2 2026 public NII/NIM agrees with the already-deployed Q2 2026 factsheet values to within EUR 0.005m / 0.005bps. On discrepancy **fail closed**, never fall back to synthetic financial data.
+- Historical loans/deposits/RWA/CET1 were **not** independently reconciled over this 22-quarter sample; they are not projected in Stage 3.1. The previously reviewed quarterly Group home and Morning Brief files and dashboards remain unchanged.
+
+### Forecasting
+
+- `src/public_horizon_engine.py` implements **two candidates per metric**: a last-observation no-change benchmark and a compact ridge-regularised ARX using only lagged NII/NIM and **lagged ECB DFR quarterly changes**. NII is modelled in log level to preserve positivity.
+- A chronological expanding-window, rolling-origin evaluation from minimum 12 quarters measures one-quarter absolute forecast error for each candidate. **Auto** selects ARX *only* if its 1Q MAE improves on no-change by over 5%; otherwise uses simpler benchmark. A manual method selector makes either benchmark inspectable.
+- Neutral DFR future path holds the Q2 2026 **known quarter-end** DFR rate flat. Users can explicitly override a next-quarter ECB-rate shock ±100bps; the ARX uses lagged rate changes and may respond with a one-quarter delay. The no-change benchmark has no rate sensitivity. Further manual adjustments are NIM bps/quarter and NII %/quarter, clearly labelled scenario assumptions (zero in neutral case).
+- Displays the original-style four prominent forecast cards, green **actual** + purple dashed **estimate** trend and Forward Lens, with metric selector between NIM and statutory Group NII, 12Q/all-22Q history and optional 90% / 95% / Both / Off bands. FY2026 NII is clearly split into Q1–Q2 official values and Q3–Q4 projected values.
+- **90% / 95% bands are conditional model-estimated ranges**, using Gaussian critical values × observed horizon-specific rolling-origin RMSE. There is **no demonstrated 90/95% future coverage**, no robust tail calibration, no guaranteed normal residuals, and no 99% interval requirement. Backtest results and sample counts are exposed in the UI. These estimates do not account comprehensively for structural breaks, acquisition perimeter, unsupported rate expectations or management adjustments.
+- The FY2026 **commercial NII management guidance including NIBC** is not used as a training target and is not falsely equated with the model's **statutory Group NII**. This research model is not ABN guidance.
+- Neither use `src/engines.py` nor modify `src/modules/horizon.py`. No change to requirements: Streamlit/Pandas already depend on NumPy; Altair is used by the previous Synthetic Horizon.
+
+### Deployment on top of Stage 3 ABN test workspace
+
+1. **Replace** `src/reported_horizon.py` (same styling, new source-aware forecast UI).
+2. **Add** `src/public_horizon_engine.py`.
+3. **Add** `data/abn_group_nii_nim_2021_public.csv` (22 official quarters).
+4. **Add** `data/ecb_dfr_quarterly_2021_public.csv` (22 rate-derived quarters).
+
+There is **no need to replace** `main.py`, `src/real_data_mode.py`, `src/modules/horizon.py`, `src/reported_horizon_engine.py`, `requirements.txt`, the Q2 factsheet CSVs or Synthetic files. New real-data sources are limited to public files. GitHub tests verify source alignment, Model-driven calculations, 90/95 nested shading, FY income split, fail-closed behavior, scenario isolation, and unchanged Synthetic routing. Test the Streamlit modal, chart legend and sliders visually within ABN before demo.
