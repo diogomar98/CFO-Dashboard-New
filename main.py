@@ -13,7 +13,7 @@ import html
 import streamlit as st
 
 from src.cockpit_state import build_state
-from src.kpi_sparklines import sparkline_html
+from src.kpi_sparklines import SPARKLINE_CSS, sparkline_html
 from src.real_data_mode import build_reported_state, render_reported_module
 from src.extended_data_loader import datasets_available
 from src.hud import (
@@ -54,6 +54,8 @@ if get_data_mode() == "synthetic" and st.button("Test LLM"):
 # Emitted in cascade order; LOCAL_CSS last so this cockpit's overrides win.
 for stylesheet in (BASE_CSS, EXTENSIONS_CSS, PANELS_CSS, LOCAL_CSS):
     render_html(stylesheet)
+if get_data_mode() == "real":
+    render_html(SPARKLINE_CSS)
 
 # The greeting stands alone: no state, no data load, one way forward.
 if not has_entered():
