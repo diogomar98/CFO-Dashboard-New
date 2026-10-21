@@ -192,7 +192,8 @@ def kpi_slot(card):
     # This leaves the original Synthetic KPI markup completely unchanged.
     trend_values = card.get("trend_values") if is_real else None
     trend_svg = sparkline_html(
-        trend_values, label=card["label"], period="quarters"
+        trend_values, label=card["label"], period="quarters",
+        dates=card.get("trend_dates"),
     ) if trend_values else ""
     value_markup = (
         f'<div class="kpi-reading-row"><div class="kpi-value">{card["value"]}</div>'
