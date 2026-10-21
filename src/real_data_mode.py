@@ -285,35 +285,67 @@ def build_reported_state(business_line=None):
             raise ValueError(f"No factsheet segment disclosures for {business_line}")
         current = selected.iloc[-1]
         previous = selected.iloc[-2] if len(selected) > 1 else None
+        group_at_close = group.loc[group["date"] == current["date"]].iloc[0]
+
         def bl_card(metric, title, module):
             now = float(current[metric])
             old = float(previous[metric]) if previous is not None else float("nan")
-            return _card(
-                title, now, old, _money, module,
-                f"{title} for {business_line}: reported {_quarter(current['date'])} balance.",
-                "The business-line amounts are source-reported and reconcile to Group when Group Functions are included.",
-                "Compare this quarter with the preceding reported quarter in Morning Brief.", "m",
+            diff = now - old if pd.notna(old) else float("nan")
+            group_total = float(group_at_close[metric])
+            share = 100.0 * now / group_total if group_total else float("nan")
+            why = (
+                f"{title.title()} for {business_line} moved "
+                f"{_signed_money(diff)} from {_money(old)} in "
+                f"{_quarter(previous['date'])} to {_money(now)} in "
+                f"{_quarter(current['date'])}."
+            ) if pd.notna(diff) else f"Reported {title.lower()}: {_money(now)}."
+            impact = (
+                f"This segment represents {share:.1f}% of reported Group "
+                f"{metric.replace('_m', '').replace('_', ' ')}. "
+                "The percentage is a calculated share; the underlying amounts "
+                "are disclosed. The movement alone does not establish quality or risk."
             )
+            next_actions = {
+                "loans_m": "Check lending composition and sector/product changes in a more detailed source before attributing loan growth.",
+                "deposits_m": "Reconcile the quarterly segment deposit movement to Group funding movements and check customer/product mix.",
+                "rwa_m": "Reconcile segment RWA changes and compare movement with segment loan balances; require risk-weight details before interpreting drivers.",
+            }
+            context = (
+                f"{_signed_money(diff)} QoQ · {share:.1f}% of Group"
+                if pd.notna(diff) else f"{share:.1f}% of Group"
+            )
+            return _card(
+                title, now, old, _money, module, why, impact,
+                next_actions[metric], "m", reading=_NEUTRAL,
+                trend_values=selected[metric].dropna().tolist(), context=context,
+            )
+
         s.kpi_cards = [
             bl_card("loans_m", "CUSTOMER LOANS", "brief"),
             bl_card("deposits_m", "CUSTOMER DEPOSITS", "brief"),
             bl_card("rwa_m", "RISK-WEIGHTED ASSETS", "brief"),
         ]
-        now_ld = 100.0 * float(current["loans_m"]) / float(current["deposits_m"])
-        prev_ld = (100.0 * float(previous["loans_m"]) / float(previous["deposits_m"])
-                   if previous is not None and previous["deposits_m"] else float("nan"))
+        ld_series = 100.0 * selected["loans_m"] / selected["deposits_m"].replace(0, float("nan"))
+        now_ld = float(ld_series.iloc[-1])
+        prev_ld = float(ld_series.iloc[-2]) if len(ld_series) > 1 else float("nan")
         s.kpi_cards.append(_card(
             "LOAN / DEPOSIT RATIO", now_ld, prev_ld, _percent, "treasury",
-            "Calculated from the reported segment customer loans and deposits.",
-            "This is a calculated ratio, not a separately disclosed management metric.",
-            "Review the underlying loans and deposits in the segment view.", "pp",
+            f"The {business_line} loan/deposit ratio is {_percent(now_ld)}, "
+            f"{_signed_pp(now_ld - prev_ld)} from the previous quarter. "
+            "This is calculated from reported segment balances, not a standalone disclosure.",
+            "Shows the relative reported lending and deposit balances of this segment. "
+            "A higher ratio is not automatically positive or negative without funding context.",
+            "Review the segment deposit outflow/inflow drivers and whether loan growth "
+            "and funding remained balanced.", "pp", reading=_NEUTRAL,
+            trend_values=ld_series.dropna().tolist(),
+            context=f"{_signed_pp(now_ld - prev_ld)} QoQ · calculated ratio",
         ))
     else:
         s.kpi_cards = [
-            _group_card(group, "cet1_ratio_pct", "CET1 RATIO", _percent, "brief", "pp", "CET1 ratio"),
-            _group_card(group, "lcr_pct", "LIQUIDITY COVERAGE", _percent, "treasury", "pp", "Liquidity coverage ratio"),
-            _group_card(group, "net_profit_m", "QUARTERLY NET PROFIT", _money, "brief", "m", "Net profit"),
-            _group_card(group, "nii_m", "NET INTEREST INCOME", _money, "brief", "m", "Net interest income"),
+            _group_card(group, "cet1_ratio_pct", "CET1 RATIO", _percent, "brief", "pp", "CET1 ratio", segments),
+            _group_card(group, "lcr_pct", "LIQUIDITY COVERAGE", _percent, "treasury", "pp", "Liquidity coverage ratio", segments),
+            _group_card(group, "net_profit_m", "QUARTERLY NET PROFIT", _money, "brief", "m", "Net profit", segments),
+            _group_card(group, "nii_m", "NET INTEREST INCOME", _money, "brief", "m", "Net interest income", segments),
         ]
     return s
 
@@ -352,7 +384,11 @@ def render_reported_module(module, s):
             st.markdown("#### Quarter-end balance sheet (€m)")
             _chart(group, ["loans_m", "deposits_m", "rwa_m"])
             st.dataframe(group.tail(7).sort_values("date", ascending=False), hide_index=True, use_container_width=True)
-        st.caption("All changes in Real Data mode compare reported quarters (QoQ), not daily signals.")
+        st.caption(
+            "All changes compare reported quarters (QoQ), not daily signals. "
+            "The green/amber/red indicators on Group cards screen the direction of "
+            "quarterly momentum only, not ABN risk appetite or regulatory compliance."
+        )
         return
 
     if module == "horizon":
