@@ -13,6 +13,7 @@ import html
 import streamlit as st
 
 from src.cockpit_state import build_state
+from src.kpi_sparklines import sparkline_html
 from src.real_data_mode import build_reported_state, render_reported_module
 from src.extended_data_loader import datasets_available
 from src.hud import (
@@ -185,11 +186,22 @@ def kpi_slot(card):
     delta_unit = card.get("delta_unit", "pp")
     # Cards state their own comparison window; month-on-month is the default.
     delta_label = card.get("delta_label", f"vs {s.previous_month_label}")
+    # A trend is shown only when the card supplies matching observed history.
+    # This leaves the original Synthetic KPI markup completely unchanged.
+    trend_values = card.get("trend_values") if is_real else None
+    trend_svg = sparkline_html(
+        trend_values, label=card["label"], period="quarters"
+    ) if trend_values else ""
+    value_markup = (
+        f'<div class="kpi-reading-row"><div class="kpi-value">{card["value"]}</div>'
+        f'{trend_svg}</div>'
+        if trend_svg else f'<div class="kpi-value">{card["value"]}</div>'
+    )
     return f"""
     <div class="kpi-slot" tabindex="0">
         <div class="kpi-card">
             <div class="kpi-label">{card['label']}</div>
-            <div class="kpi-value">{card['value']}</div>
+            {value_markup}
             <div class="executive-delta">{arrow_delta(card['delta_pp'], unit=delta_unit)} {delta_label}</div>
             <div class="executive-context">{card['context']}</div>
             <div class="kpi-badges">{rag_badge(card['rag'])}</div>
@@ -217,8 +229,11 @@ def dial(module):
 selection_class = "has-selection" if selected_module != "home" else ""
 horizon_confidence = confidence_label(s.conf_horizon_ye_nim) if not is_real else "Not modelled"
 nim_headline = (
-    f"NIM {s.cert_current_nim:.2f}% · {s.nim_mom_bps:+.1f} bps QoQ"
-    if is_real else f"NIM {s.cert_current_nim:.2f}% · {s.nim_mom_bps:+.1f} bps MoM"
+    "Business-line NIM not disclosed · Group data only"
+    if is_real and selected_bl
+    else (f"NIM {s.cert_current_nim:.2f}% · {s.nim_mom_bps:+.1f} bps QoQ"
+          if is_real else
+          f"NIM {s.cert_current_nim:.2f}% · {s.nim_mom_bps:+.1f} bps MoM")
 )
 horizon_headline = (
     "Reported trends · forecast pending" if is_real
