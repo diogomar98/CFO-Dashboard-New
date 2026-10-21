@@ -372,7 +372,7 @@ def render_reported_module(module, s):
     if module == "brief":
         # Isolated factsheet-only presentation; the original Synthetic module
         # (src/modules/brief.py) remains untouched.
-        from src.modules.reported_brief import render_reported_brief
+        from src.reported_brief import render_reported_brief
         render_reported_brief(s)
         return
 
