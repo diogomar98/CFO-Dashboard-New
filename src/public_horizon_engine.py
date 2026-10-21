@@ -108,8 +108,8 @@ def _arx_step(lag_y, lag_dfr_move, params):
     return float(ymean + ystd * (beta[0] + np.dot(beta[1:], standardized)))
 
 
-def _forecast_from_origin(y, dfr, origin, horizon, model, rate_shock_bps=0.0,
-                          level_overlay=0.0):
+def _forecast_from_origin(y, dfr, dfr_quarter_end, origin, horizon, model,
+                          rate_shock_bps=0.0, level_overlay=0.0):
     """Predict from data KNOWN at origin, never reading future actual rates."""
     if model not in {"rate_arx", "no_change"}:
         raise ValueError("Unknown model")
@@ -117,7 +117,9 @@ def _forecast_from_origin(y, dfr, origin, horizon, model, rate_shock_bps=0.0,
     prior = float(y[origin])
     previous_rate = float(dfr[origin - 1])
     current_rate = float(dfr[origin])
-    projected_rate = current_rate + float(rate_shock_bps) / 100.0
+    # An as-of-origin flat forward rate starts at the *known quarter-end*
+    # DFR, not the trailing quarterly average (these diverge at rate turns).
+    projected_rate = float(dfr_quarter_end[origin]) + float(rate_shock_bps) / 100.0
     forecasts=[]
     for h in range(1,horizon+1):
         rate_move_known_at_prior = current_rate - previous_rate
@@ -130,22 +132,22 @@ def _forecast_from_origin(y, dfr, origin, horizon, model, rate_shock_bps=0.0,
     return np.array(forecasts,dtype=float)
 
 
-def _rolling_errors(y, dfr, model, h):
+def _rolling_errors(y, dfr, dfr_quarter_end, model, h):
     """Expanding-window genuinely out-of-sample errors for one fixed method."""
     residuals=[]
     for origin in range(MIN_TRAIN-1,len(y)-h):
-        prediction = _forecast_from_origin(y,dfr,origin,h,model)[h-1]
+        prediction = _forecast_from_origin(y,dfr,dfr_quarter_end,origin,h,model)[h-1]
         residuals.append(float(y[origin+h]-prediction))
     return np.array(residuals,dtype=float)
 
 
-def _choose_model(y, dfr, requested):
+def _choose_model(y, dfr, dfr_quarter_end, requested):
     if requested != "auto":
         if requested not in MODELS:
             raise ValueError("Unknown requested model")
         return requested
-    baseline = _rolling_errors(y,dfr,"no_change",1)
-    driver = _rolling_errors(y,dfr,"rate_arx",1)
+    baseline = _rolling_errors(y,dfr,dfr_quarter_end,"no_change",1)
+    driver = _rolling_errors(y,dfr,dfr_quarter_end,"rate_arx",1)
     base_mae = float(np.mean(np.abs(baseline)))
     drv_mae = float(np.mean(np.abs(driver)))
     # Complexity must demonstrably outperform the no-change benchmark.
@@ -188,16 +190,17 @@ def build_public_horizon(frame, *, model_preference="auto", rate_shock_bps=0.0,
     if n != 22:
         raise ValueError("Public forecast requires exactly 22 independently reconciled quarters.")
     dfr=frame["dfr_qavg_pct"].to_numpy(dtype=float)
+    dfr_quarter_end=frame["dfr_qend_pct"].to_numpy(dtype=float)
     info={}
     projections={}
     for metric in ("nim_bps","nii_m"):
         historical = _source_series(frame,metric)
         log_scale=metric=="nii_m"
-        selected = _choose_model(historical,dfr,model_preference)
+        selected = _choose_model(historical,dfr,dfr_quarter_end,model_preference)
         adjustment=(float(nim_overlay_bps) if not log_scale
                     else math.log1p(float(nii_overlay_pct)/100.0))
         forward=_forecast_from_origin(
-            historical,dfr,n-1,quarters_ahead,selected,
+            historical,dfr,dfr_quarter_end,n-1,quarters_ahead,selected,
             rate_shock_bps=rate_shock_bps,
             level_overlay=adjustment,
         )
@@ -207,7 +210,7 @@ def build_public_horizon(frame, *, model_preference="auto", rate_shock_bps=0.0,
         bands=[]
         horizon_errors=[]
         for h in range(1,quarters_ahead+1):
-            residuals = _rolling_errors(historical,dfr,selected,h)
+            residuals = _rolling_errors(historical,dfr,dfr_quarter_end,selected,h)
             if len(residuals)<5:
                 raise ValueError("Too few backtest forecast errors to display a model range.")
             rmse=float(np.sqrt(np.mean(residuals**2)))
@@ -224,15 +227,15 @@ def build_public_horizon(frame, *, model_preference="auto", rate_shock_bps=0.0,
             bands.append({confidence:_band(forward[h-1],rmse,confidence,log_scale)
                           for confidence in (90,95)})
         projections[metric] = {"values":values,"bands":bands}
-        base_errors=_rolling_errors(historical,dfr,"no_change",1)
-        arx_errors=_rolling_errors(historical,dfr,"rate_arx",1)
+        base_errors=_rolling_errors(historical,dfr,dfr_quarter_end,"no_change",1)
+        arx_errors=_rolling_errors(historical,dfr,dfr_quarter_end,"rate_arx",1)
         info[metric]={
             "model":selected,
             "source_rows":n,
             "backtest_1q_count":len(base_errors),
             "baseline_1q_mae":float(np.mean(np.abs(base_errors))),
             "arx_1q_mae":float(np.mean(np.abs(arx_errors))),
-            "selected_1q_mae":float(np.mean(np.abs(_rolling_errors(historical,dfr,selected,1)))),
+            "selected_1q_mae":float(np.mean(np.abs(_rolling_errors(historical,dfr,dfr_quarter_end,selected,1)))),
             "horizons":horizon_errors,
             "error_unit":"log ratio" if log_scale else "basis points",
         }
