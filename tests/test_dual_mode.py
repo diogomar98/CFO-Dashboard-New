@@ -9,7 +9,8 @@ from unittest.mock import patch
 import pandas as pd
 
 from src import hud
-from src.real_data_mode import build_reported_state, load_reported
+from src.real_data_mode import build_reported_state, load_reported, _directional_rag
+from src.kpi_sparklines import sparkline_html, SPARKLINE_CSS
 
 
 class ReportedDataTests(unittest.TestCase):
@@ -55,6 +56,52 @@ class ReportedDataTests(unittest.TestCase):
         ].iloc[0]
         self.assertIn(f"{latest_wm['loans_m']:,.0f}", state.kpi_cards[0]["value"])
 
+    def test_reported_kpi_insights_and_true_quarterly_sparklines(self):
+        group = build_reported_state()
+        cards = {card["label"]: card for card in group.kpi_cards}
+        cet1 = cards["CET1 RATIO"]
+        self.assertEqual(len(cet1["trend_values"]), 7)
+        self.assertAlmostEqual(cet1["trend_values"][-1], 15.859229928)
+        self.assertEqual(cet1["rag"]["status"], "GREEN")
+        self.assertIn("not ABN-approved", cet1["rag"]["rule"])
+        self.assertIn("CET1 capital", cet1["why"])
+        self.assertIn("RWA", cet1["next"])
+        lcr = cards["LIQUIDITY COVERAGE"]
+        self.assertIn("NSFR", lcr["why"])
+        self.assertIn("mixed", lcr["impact"])
+        profit = cards["QUARTERLY NET PROFIT"]
+        self.assertEqual(len(profit["trend_values"]), 10)
+        self.assertIn("impairment", profit["why"])
+        self.assertIn("reconcile", profit["impact"].lower())
+        nii = cards["NET INTEREST INCOME"]
+        self.assertIn("NIM", nii["why"])
+        self.assertIn("earning assets", nii["next"])
+        self.assertEqual(cards["CET1 RATIO"]["delta_label"], "QoQ")
+        self.assertNotIn("vs prior quarter", cards["CET1 RATIO"]["context"])
+
+    def test_segment_cards_have_own_history_not_group_nii(self):
+        wm = build_reported_state("Wealth Management")
+        self.assertEqual(len(wm.kpi_cards), 4)
+        for card in wm.kpi_cards:
+            self.assertEqual(len(card["trend_values"]), 7)
+            self.assertEqual(card["rag"]["status"], "NOT_ASSESSED")
+        self.assertIn("business-line", wm.kpi_cards[0]["next"].lower())
+
+    def test_momentum_rag_is_not_regulatory_rating(self):
+        self.assertEqual(_directional_rag([1, 2, 3])["status"], "GREEN")
+        self.assertEqual(_directional_rag([3, 2, 1])["status"], "RED")
+        self.assertEqual(_directional_rag([3, 4, 3])["status"], "AMBER")
+        self.assertEqual(_directional_rag([3])["status"], "NOT_ASSESSED")
+
+    def test_accessible_sparklines_are_data_based(self):
+        rendered = sparkline_html([None, 2, 5, 4], label="CET1", period="quarters")
+        self.assertIn("<svg", rendered)
+        self.assertIn("3Q TREND", rendered)
+        self.assertIn("aria-label", rendered)
+        self.assertIn("CET1", rendered)
+        self.assertEqual(sparkline_html([1]), "")
+        self.assertIn(".home-left .kpi-sparkline", SPARKLINE_CSS)
+
     def test_navigation_retains_mode(self):
         with patch("src.hud.get_query_value", side_effect=lambda key, default="": {
             "mode": "real", "bl": "pbb", "module": "home"
@@ -73,6 +120,7 @@ class ReportedDataTests(unittest.TestCase):
         self.assertIn("RENDERERS[module](s)", main)
         self.assertIn("s = build_reported_state(business_line=selected_bl)", main)
         self.assertNotIn("if render_reported_dashboard()", main)
+        self.assertIn("sparkline_html", main)
 
 
 if __name__ == "__main__":
