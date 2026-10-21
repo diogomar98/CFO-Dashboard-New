@@ -95,7 +95,7 @@ class ReportedDataTests(unittest.TestCase):
 
     def test_accessible_sparklines_are_data_based(self):
         rendered = sparkline_html([None, 2, 5, 4], label="CET1", period="quarters")
-        self.assertIn("3Q TREND", rendered)
+        self.assertIn("<span>First</span><span>Latest</span>", rendered)
         self.assertIn('role="img"', rendered)
         self.assertIn("aria-label", rendered)
         self.assertIn("CET1", rendered)
@@ -106,10 +106,38 @@ class ReportedDataTests(unittest.TestCase):
         self.assertEqual(rendered.count('class="kpi-mini-segment'), 2)
         self.assertEqual(rendered.count('class="kpi-mini-dot'), 3)
         self.assertIn("rotate(", rendered)
-        self.assertIn("Visual scale zoomed", rendered)
+        self.assertIn("zero-based vertical axis", rendered)
         self.assertEqual(sparkline_html([1]), "")
         self.assertIn(".home-left .kpi-mini-bar", SPARKLINE_CSS)
         self.assertIn(".home-left .kpi-mini-segment", SPARKLINE_CSS)
+
+    def test_quarter_year_labels_and_honest_cet1_scale(self):
+        import re
+
+        state = build_reported_state()
+        cet1 = state.kpi_cards[0]
+        self.assertEqual(cet1["trend_dates"][0], "Q4 2024")
+        self.assertEqual(cet1["trend_dates"][-1], "Q2 2026")
+        output = sparkline_html(
+            cet1["trend_values"],
+            dates=cet1["trend_dates"],
+            label=cet1["label"],
+        )
+        self.assertIn("<span>Q4 2024</span><span>Q2 2026</span>", output)
+        self.assertIn('title="Q1 2026:', output)
+        self.assertIn('title="Q2 2026:', output)
+        self.assertNotIn("7Q TREND", output)
+        heights = [float(v) for v in re.findall(r'height:(\\d+\\.\\d+)px', output)]
+        self.assertEqual(len(heights), 7)
+        # A 0.32 pp CET1 change against ~16% should not fill a 32px plot.
+        self.assertLess(abs(heights[-1] - heights[-2]), 1.2)
+        self.assertIn("height: auto !important", SPARKLINE_CSS)
+        self.assertIn("minmax(168px", SPARKLINE_CSS)
+        self.assertIn("rgba(93,183,119,0.27)", SPARKLINE_CSS)
+
+    def test_invalid_quarter_dates_are_rejected(self):
+        with self.assertRaises(ValueError):
+            sparkline_html([1.0, 2.0], dates=["Q1 2026"])
 
     def test_cfo_reported_charts_have_bars_and_line_in_each_card(self):
         state = build_reported_state()
@@ -119,11 +147,13 @@ class ReportedDataTests(unittest.TestCase):
             self.assertEqual(output.count('class="kpi-mini-bar'), count)
             self.assertEqual(output.count('class="kpi-mini-segment'), count - 1)
             self.assertEqual(output.count('class="kpi-mini-dot'), count)
+            self.assertEqual(len(card["trend_dates"]), count)
         wm = build_reported_state("Wealth Management")
         for card in wm.kpi_cards:
             output = sparkline_html(card["trend_values"], label=card["label"])
             self.assertEqual(output.count('class="kpi-mini-bar'), 7)
             self.assertEqual(output.count('class="kpi-mini-segment'), 6)
+            self.assertEqual(len(card["trend_dates"]), 7)
 
     def test_navigation_retains_mode(self):
         with patch("src.hud.get_query_value", side_effect=lambda key, default="": {
