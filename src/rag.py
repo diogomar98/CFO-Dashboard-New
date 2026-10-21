@@ -57,6 +57,8 @@ def rag_badge(reading):
     status = reading["status"]
     if status == "NOT_ASSESSED":
         return '<span class="rag-badge" title="No source-backed threshold">Reported · not rated</span>'
+    if status == "UNAVAILABLE":
+        return '<span class="rag-badge" title="Source not integrated">Awaiting data</span>'
     return (
         f'<span class="rag-badge rag-{status.lower()}" '
         f'title="{html.escape(reading["rule"], quote=True)}">'
@@ -69,6 +71,8 @@ def rag_line(reading):
     status = reading["status"]
     if status == "NOT_ASSESSED":
         return '<span class="rag-badge">Reported · not rated</span>'
+    if status == "UNAVAILABLE":
+        return '<span class="rag-badge">Awaiting data</span>'
     return (
         f'<span class="rag-badge rag-{status.lower()}"><span class="rag-dot"></span>'
         f'{status.title()}</span>'
