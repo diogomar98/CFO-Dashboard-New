@@ -67,3 +67,13 @@ The Real Data cards beside the radial now show a **mini sparkline on the right**
 There is **no change** to the two quarterly CSVs, `hud_css.py`, `requirements.txt`, `app.yaml.txt`, Git credentials or existing Databricks connections.
 
 Automated checks: `python -m unittest discover -s tests -p test_dual_mode.py -v`. Review card widths, hover content and mode transitions at your ABN workspace's actual screen size before merging.
+
+## Stage 1.2 — visible bar + trend overlays (21 October 2026)
+
+The original sparkline used nested inline SVG inside the `st.html()` home HUD. Streamlit's DOMPurify sanitization can remove the SVG drawing while leaving the text label visible. The revised `src/kpi_sparklines.py` uses ordinary HTML span elements and CSS to render **both the individual quarter bars and connecting trend-line segments** inside each card. No SVG, canvas, Javascript, charting dependencies, or change to the deployed ABN environment is required. Each plot is drawn from the *same reported data already in the cards*.
+
+- Group figures: 7 quarters for CET1/LCR, 10 quarters for net profit/NII; segment figures: 7 quarters.
+- Both layers use the same **zoomed observed-value scale** to make small quarter-to-quarter changes visible in a 110-pixel chart; the accessible tooltip explicitly identifies the zoom (not a zero baseline). Plots are descriptive, not performance or risk ratings.
+- The existing dark green visual palette remains; latest quarter highlighted. Existing synthetic path unchanged.
+
+**If Stage 1.1 is already installed and the chart label displays without the plot, copy only** `src/kpi_sparklines.py` **from this branch into the same `src/` folder in Databricks.** The existing `main.py` import/function call and the real-data state do not change.
