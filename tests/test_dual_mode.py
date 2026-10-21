@@ -95,12 +95,35 @@ class ReportedDataTests(unittest.TestCase):
 
     def test_accessible_sparklines_are_data_based(self):
         rendered = sparkline_html([None, 2, 5, 4], label="CET1", period="quarters")
-        self.assertIn("<svg", rendered)
         self.assertIn("3Q TREND", rendered)
+        self.assertIn('role="img"', rendered)
         self.assertIn("aria-label", rendered)
         self.assertIn("CET1", rendered)
+        # No inline SVG: st.html's sanitizer strips SVG inside the HUD.
+        self.assertNotIn("<svg", rendered.lower())
+        self.assertNotIn("<canvas", rendered.lower())
+        self.assertEqual(rendered.count('class="kpi-mini-bar'), 3)
+        self.assertEqual(rendered.count('class="kpi-mini-segment'), 2)
+        self.assertEqual(rendered.count('class="kpi-mini-dot'), 3)
+        self.assertIn("rotate(", rendered)
+        self.assertIn("Visual scale zoomed", rendered)
         self.assertEqual(sparkline_html([1]), "")
-        self.assertIn(".home-left .kpi-sparkline", SPARKLINE_CSS)
+        self.assertIn(".home-left .kpi-mini-bar", SPARKLINE_CSS)
+        self.assertIn(".home-left .kpi-mini-segment", SPARKLINE_CSS)
+
+    def test_cfo_reported_charts_have_bars_and_line_in_each_card(self):
+        state = build_reported_state()
+        for card in state.kpi_cards:
+            output = sparkline_html(card["trend_values"], label=card["label"])
+            count = len(card["trend_values"])
+            self.assertEqual(output.count('class="kpi-mini-bar'), count)
+            self.assertEqual(output.count('class="kpi-mini-segment'), count - 1)
+            self.assertEqual(output.count('class="kpi-mini-dot'), count)
+        wm = build_reported_state("Wealth Management")
+        for card in wm.kpi_cards:
+            output = sparkline_html(card["trend_values"], label=card["label"])
+            self.assertEqual(output.count('class="kpi-mini-bar'), 7)
+            self.assertEqual(output.count('class="kpi-mini-segment'), 6)
 
     def test_navigation_retains_mode(self):
         with patch("src.hud.get_query_value", side_effect=lambda key, default="": {
