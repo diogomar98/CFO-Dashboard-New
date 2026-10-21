@@ -48,3 +48,22 @@ The `NOT_ASSESSED` status deliberately does **not** assign fictional RAG colors/
 ## Next phase
 
 Adapt individual model modules to a quarterly calculation contract: measured vs calculated vs assumed metrics; quarterly balance-sheet stocks vs flows; forecast and scenario assumptions; source lineage to factsheet cells. Do not reuse synthetic 30-day repricing rates or synthetic portfolio DV01 as ABN financial actuals.
+
+## Stage 1.1 — executive KPI insights and compact quarterly trends (21 October 2026)
+
+The Real Data cards beside the radial now show a **mini sparkline on the right**, drawn only from disclosed observations: 7 reported quarters of CET1/LCR and business-line balances, or 10 reported quarters of net profit/NII. SVG needs no additional Python or Javascript dependencies. It is neutral green in the existing design, and is not an assessment of good/bad direction.
+
+- The cards' **Why** comments now quantify the actual QoQ movements and relevant reported drivers: CET1 capital/RWA, LCR/NSFR/deposits, profit/income/expenses/impairments, and NII/NIM/loan balances. They do not claim more granular causal attribution than the source allows.
+- **Impact** explains related reported trends, their implications and source limitations. **Next** identifies concrete validation questions, not fabricated forecasts.
+- The four Group KPI **RAG** lights are *directional momentum screening*, **not bank-approved risk limits**: Green = a higher latest-quarter reading, Amber = flat or the first decline, Red = two consecutive declines. The rule appears in the hover explanation and explicitly disclaims ABN regulatory/management thresholds. Segment loans, deposits, RWA and L/D remain *not rated* where the desirable direction is context-dependent.
+- Real mode's business-line dial now explicitly says the Group NIM is not a disclosed business-line NIM.
+- Synthetic markup and metrics have not been changed.
+
+**If you already copied Stage 1 into ABN:** update **only three files**:
+1. Replace `main.py` with the updated dual-mode branch version.
+2. Replace `src/real_data_mode.py`.
+3. Add **new** `src/kpi_sparklines.py`.
+
+There is **no change** to the two quarterly CSVs, `hud_css.py`, `requirements.txt`, `app.yaml.txt`, Git credentials or existing Databricks connections.
+
+Automated checks: `python -m unittest discover -s tests -p test_dual_mode.py -v`. Review card widths, hover content and mode transitions at your ABN workspace's actual screen size before merging.
