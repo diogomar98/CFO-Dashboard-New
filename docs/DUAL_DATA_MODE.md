@@ -136,3 +136,31 @@ Following the ABN screenshots:
 - **Provenance safeguard:** those news rows and model-derived impact/confidence classifications are explicitly labelled **prototype / illustrative** in Real Data mode. They are *not* verified against the ABN AMRO fact sheet, and this is not a live news API. If existing prototype CSVs are absent, the news section shows an informative empty state instead of fabricating headlines.
 
 **ABN copy/paste:** replace only `src/reported_brief.py` in the existing dual-mode workspace. The original synthetic renderer, deployed `main.py`, `src/hud_css.py`, `src/real_data_mode.py`, both financial CSVs, requirements and Databricks settings remain unchanged. To display original news rows, retain the existing `data/news_signals.csv` and `data/news_geo_impact.csv` files from the working Synthetic mode.
+
+## Stage 3 — quarterly Horizon with the Synthetic layout (21 October 2026)
+
+**Implementation:** `src/reported_horizon.py` renders a separate Real Data Horizon using the original Synthetic experience as the reference. `src/reported_horizon_engine.py` contains the dependency-light, testable deterministic quarterly calculations.
+
+### Retained visual structure
+- Four headline forecast cards across the top (year-end NIM baseline, FY NII baseline, next-quarter NIM step and balance-sheet run-rate).
+- Two-column actual-to-baseline trajectory and Forward Lens with the same green historical line/purple dashed projected line, explicit legend and a What-If navigation link.
+- Selectable paths for reported NIM, quarterly NII, loans and deposits.
+- An unobtrusive, editable assumptions expander so the default view remains clean.
+
+### Sources and baseline methodology
+- Actuals: from the existing `data/abn_quarterly.csv` exclusively; latest quarter Q2 2026. The chart plots true calendar-quarter labels and does not create monthly/daily observations.
+- Future points: four quarterly *illustrations* from the latest reported close (Q3 2026–Q2 2027). First 2026 year-end NIM is the illustrative Q4 2026 value. FY2026 NII combines sourced Q1+Q2 actuals with *clearly identified* Q3+Q4 modelled NII. No annualisation of partial-year actuals is presented as a reported FY number.
+- Initial editable inputs are the median of the most recent three **consecutive reported QoQ moves**, subject to explicit modelling guardrails: first-quarter NIM movement ±40 bps, NII growth ±15% per quarter, loans/deposits growth ±10% per quarter. A 50% per-quarter retention of the NIM momentum is an **unsourced modelling choice**, not ABN guidance.
+- The four trajectories use their separately entered assumptions. NIM is **not** inferred from NII divided by quarter-end loans; customer loans are not treated as interest-earning asset averages. The model neither estimates ECB betas, taxes, credit losses, CET1 sensitivities nor an audited combined P&L.
+- No confidence percentages, 90% prediction bands, official budget comparisons or regulatory RAG ratings are shown: there is not enough calibrated evidence in the factsheet to support them.
+- When a specific business line is selected, the view explicitly states that these are **Group** NIM/NII baselines; no invented segment profitability forecast is displayed.
+
+### ABN deployment / backwards compatibility
+If you already have the working dual-mode app and Stage 2.1 Morning Brief installed, **copy only these three files**:
+1. Replace `src/real_data_mode.py`.
+2. Create `src/reported_horizon_engine.py`.
+3. Create `src/reported_horizon.py`.
+
+Do **not** copy/replace `src/modules/horizon.py`, `src/engines.py`, existing Synthetic data generators, `main.py`, `src/hud_css.py` or financial/news CSVs. The existing `requirements.txt` and `app.yaml.txt` are unchanged. The UI uses Altair, already imported by the working Synthetic Horizon via `src/charts.py`; no new runtime dependency is added to the deployed app.
+
+The non-ABN GitHub checks include source reconciliation, quarter-end dates, Q2 2026 actuals, explicit forecast provenance, NIM momentum decay, independent NII assumptions, full-year NII actual/projected split, safe failure on invalid inputs, Altair chart generation and preserved Synthetic route. **A workspace UI smoke test is still required** for modal sizing, forms, navigation, and changing assumptions before merge.
