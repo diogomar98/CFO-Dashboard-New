@@ -100,7 +100,7 @@ def _directional_rag(values):
 
 
 def _card(label, current, previous, formatter, module, why, impact, next_action,
-          unit, *, reading=None, trend_values=None, context=None):
+          unit, *, reading=None, trend_values=None, trend_dates=None, context=None):
     # Never substitute daily/monthly data or interpolate missing reporting periods.
     delta = float(current - previous) if pd.notna(current) and pd.notna(previous) else 0.0
     movement = (
@@ -114,6 +114,7 @@ def _card(label, current, previous, formatter, module, why, impact, next_action,
         "rag": reading if reading is not None else _NEUTRAL,
         "why": why, "impact": impact, "next": next_action,
         "trend_values": list(trend_values) if trend_values is not None else [],
+        "trend_dates": list(trend_dates) if trend_dates is not None else [],
     }
 
 
@@ -243,6 +244,7 @@ def _group_card(frame, metric, label, formatter, module, unit, description, segm
         label, now, before, formatter, module, why, impact, next_action, unit,
         reading=_directional_rag(available[metric].tolist()),
         trend_values=available[metric].tolist(),
+        trend_dates=[_quarter(date) for date in available["date"]],
         context=context,
     )
 
@@ -317,7 +319,9 @@ def build_reported_state(business_line=None):
             return _card(
                 title, now, old, _money, module, why, impact,
                 next_actions[metric], "m", reading=_NEUTRAL,
-                trend_values=selected[metric].dropna().tolist(), context=context,
+                trend_values=selected[metric].dropna().tolist(),
+                trend_dates=[_quarter(date) for date in selected.loc[selected[metric].notna(), "date"]],
+                context=context,
             )
 
         s.kpi_cards = [
@@ -338,6 +342,7 @@ def build_reported_state(business_line=None):
             "Review the segment deposit outflow/inflow drivers and whether loan growth "
             "and funding remained balanced.", "pp", reading=_NEUTRAL,
             trend_values=ld_series.dropna().tolist(),
+            trend_dates=[_quarter(date) for date in selected.loc[ld_series.notna(), "date"]],
             context=f"{_signed_pp(now_ld - prev_ld)} QoQ · calculated ratio",
         ))
     else:
