@@ -134,6 +134,10 @@ class ReportedHorizonTests(unittest.TestCase):
         self.assertIn("reported NIM", text)
         source = Path("src/reported_horizon.py").read_text(encoding="utf-8")
         self.assertIn("Where are we heading?",source)
+        # Real Data KPI numbers should retain the strong Synthetic hierarchy.
+        self.assertIn("font-size:clamp(1.66rem,2.38vw,2.40rem)", source)
+        self.assertIn("font-weight:800;color:#E7FFE9", source)
+        self.assertIn("rh-metric::before", source)
         self.assertIn("Forward trajectory / actual",source)
         self.assertIn("Balance-sheet run-rate",source)
         self.assertIn("from src.reported_horizon import render_reported_horizon",
