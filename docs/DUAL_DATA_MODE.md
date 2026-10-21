@@ -77,3 +77,19 @@ The original sparkline used nested inline SVG inside the `st.html()` home HUD. S
 - The existing dark green visual palette remains; latest quarter highlighted. Existing synthetic path unchanged.
 
 **If Stage 1.1 is already installed and the chart label displays without the plot, copy only** `src/kpi_sparklines.py` **from this branch into the same `src/` folder in Databricks.** The existing `main.py` import/function call and the real-data state do not change.
+
+## Stage 1.3 — proportional zero-based charts, spacing and dates
+
+Following the ABN screenshot review:
+
+- Replaced the **observed minimum–maximum zoom** with a **zero-including y-axis** for the bar and line overlay. For positive values this is zero-based; a ~0.3 pp CET1 change now results in only a small line movement rather than appearing like a major ratio jump. This is an intentionally less dramatic but more faithful view of magnitude.
+- Reduced bar opacity, line brightness and glow in the existing green HUD aesthetic.
+- Replaced the generic `7Q TREND`/`10Q TREND` labels with **first and last reported quarter and year** (e.g., `Q4 2024` and `Q2 2026`). Each individual quarter has its date and value in the bar's tooltip. Labels are sourced from the real dataset, never constructed from a guessed reporting date.
+- Gave the four Real Data KPI cards a minimum row height and permitted page scrolling instead of vertically compressing and clipping their headings/badges when the extra data-source selector consumes viewport height. **Synthetic CSS remains unchanged.**
+- The card chart still uses CSS/HTML only and requires **no new packages** or Databricks changes.
+
+**For an existing ABN test deployment, update three files only:**
+`src/kpi_sparklines.py`, `src/real_data_mode.py`, and `main.py`.
+Continue using the same two real quarterly CSVs and all existing Databricks settings.
+
+The bar+line sparkline is deliberately small and cannot reveal subtle ratio movements as prominently as a zoomed chart. Use the adjacent numerical QoQ delta for precise movements.
