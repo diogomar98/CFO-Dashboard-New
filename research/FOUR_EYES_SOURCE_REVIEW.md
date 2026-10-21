@@ -40,3 +40,14 @@
 6. Always separate: published Group facts, management guidance (including acquisition effects), public macro proxies, modelling assumptions, and scenario/simulation outputs.
 
 **No ABN-internal nonpublic data has been sourced, requested or included in this research evidence package.**
+
+## 2021-on independent source check and repaired ECB links (21 October 2026)
+
+- **Positive Group NII and NIM outcome:** 22 quarterly values from 2021 Q1–2026 Q2; 49/49 cross-report and selected bank-disclosure comparisons passed. Official review record: [2021 NII/NIM four-eyes result](2021_NII_NIM_4EYES_RESULTS.md). Full line-level evidence: https://github.com/diogomar98/CFO-Dashboard-New/actions/runs/39640848529/artifacts/12365272432.
+- **Do not equate Group income-metric signoff with full Horizon validation.** Loans, deposits, RWA, segment reporting, statutory/commercial NII guidance, NIBC acquisition/perimeter and all model intervals remain unapproved for the expanded historical model.
+- The ECB interactive `data.ecb.europa.eu` portal returned **HTTP 503**, independently reproduced by the GitHub Actions test. These **alternative official URLs returned HTTP 200**:
+  - Human-readable ECB official key interest rate history: https://www.ecb.europa.eu/stats/policy_and_exchange_rates/key_ecb_interest_rates/html/index.en.html
+  - Direct official ECB API CSV of DFR events over requested historical range: https://data-api.ecb.europa.eu/service/data/FM/B.U2.EUR.4F.KR.DFR.LEV?startPeriod=2021-01-01&endPeriod=2026-06-30&format=csvdata
+  - ECB official API documentation: https://data.ecb.europa.eu/help/data-examples
+- Caution: the ECB `FM.B...` series is **date-of-changes**, not a daily rate observed at every date. Reconstruct an effective policy rate over each quarter using event dates and lagged last-observed rate before computing quarterly averages. Do not assume a zero change on non-announcement days.
+- **99% requirement:** A theoretical 99% prediction range could be generated from a chosen parametric model, but no statistically supportable claim of demonstrated 99% future coverage can be made with this small quarterly sample. Do not present a validated 99% forecast interval until model assumptions, forecast errors and sufficient calibration evidence have been separately approved.
