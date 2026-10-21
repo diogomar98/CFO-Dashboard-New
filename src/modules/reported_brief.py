@@ -184,8 +184,12 @@ def compare_actuals(frame, metric):
     if clean.empty:
         return None
     latest = clean.iloc[-1]
-    earlier = clean.loc[clean["date"] == latest["date"] - pd.DateOffset(months=3)]
-    year_ago = clean.loc[clean["date"] == latest["date"] - pd.DateOffset(years=1)]
+    # Quarter comparisons use accounting periods rather than subtracting
+    # calendar months (30 June - 3 months is 30 March, not 31 March).
+    current_quarter = pd.Timestamp(latest["date"]).to_period("Q")
+    quarters = clean["date"].dt.to_period("Q")
+    earlier = clean.loc[quarters == current_quarter - 1]
+    year_ago = clean.loc[quarters == current_quarter - 4]
     return {
         "quarter": _quarter(latest["date"]),
         "now": float(latest[metric]),
