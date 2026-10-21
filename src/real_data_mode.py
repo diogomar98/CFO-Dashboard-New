@@ -370,30 +370,10 @@ def render_reported_module(module, s):
     latest = group.iloc[-1]
     st.caption(f"ABN AMRO reported actuals · {_quarter(latest['date'])} · Source: {_SOURCE}")
     if module == "brief":
-        st.markdown("#### Quarterly financial health check")
-        if s.business_line:
-            selected = segments.loc[segments["business_line"] == s.business_line]
-            st.write(f"Reported {s.business_line} loans, deposits and risk-weighted assets (€m).")
-            _chart(selected, ["loans_m", "deposits_m", "rwa_m"])
-            st.dataframe(selected.sort_values("date", ascending=False), hide_index=True, use_container_width=True)
-        else:
-            left, right = st.columns(2)
-            with left:
-                st.metric("Quarterly net profit", _money(latest["net_profit_m"]))
-                st.metric("Quarterly NII", _money(latest["nii_m"]))
-            with right:
-                st.metric("Reported CET1", _percent(latest["cet1_ratio_pct"]))
-                st.metric("Reported LCR", _percent(latest["lcr_pct"]))
-            st.markdown("#### Quarterly income and profitability (€m)")
-            _chart(group, ["nii_m", "net_profit_m"])
-            st.markdown("#### Quarter-end balance sheet (€m)")
-            _chart(group, ["loans_m", "deposits_m", "rwa_m"])
-            st.dataframe(group.tail(7).sort_values("date", ascending=False), hide_index=True, use_container_width=True)
-        st.caption(
-            "All changes compare reported quarters (QoQ), not daily signals. "
-            "The green/amber/red indicators on Group cards screen the direction of "
-            "quarterly momentum only, not ABN risk appetite or regulatory compliance."
-        )
+        # Isolated factsheet-only presentation; the original Synthetic module
+        # (src/modules/brief.py) remains untouched.
+        from src.modules.reported_brief import render_reported_brief
+        render_reported_brief(s)
         return
 
     if module == "horizon":
