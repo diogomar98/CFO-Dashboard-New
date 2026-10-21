@@ -21,20 +21,43 @@ HORIZON_CSS = """
 .rh-description {font-size:.79rem;color:#A2B9AA;line-height:1.5;max-width:1100px;margin:.25rem 0 .85rem;}
 .rh-pill {display:inline-flex;margin:.55rem 0 .5rem;padding:.25rem .5rem;border:1px solid rgba(211,176,97,.42);
  color:#E8CF92;background:rgba(143,117,55,.09);font-size:.64rem;font-weight:700;letter-spacing:.045em;}
-.rh-metric {min-height:136px;padding:1rem 1rem .7rem;background:linear-gradient(145deg,rgba(20,31,24,.85),rgba(7,13,10,.87));
- border:1px solid rgba(106,158,116,.28);box-sizing:border-box;}
-.rh-metric-name {font-size:.64rem;letter-spacing:.06em;font-weight:750;color:#93B69E;text-transform:uppercase;}
-.rh-metric-value {margin:.36rem 0;font-size:clamp(1.2rem,1.65vw,1.92rem);
- font-weight:750;color:#F0F7F1;font-family:"Cascadia Mono",Consolas,monospace;white-space:nowrap;}
-.rh-metric-detail {font-size:.63rem;color:#A1BEAA;line-height:1.4;}
-.rh-metric-foot {margin-top:.4rem;font-size:.54rem;letter-spacing:.055em;color:#E1C991;text-transform:uppercase;}
+/* Match the Synthetic Horizon card hierarchy while retaining the same
+   explicitly labelled illustrative-vs-actual status. Scoped to Real mode. */
+.rh-metric {
+ position:relative;min-height:169px;padding:1.15rem 1.15rem .95rem;
+ background:linear-gradient(145deg,rgba(17,24,19,.96),rgba(9,13,10,.93)),
+            radial-gradient(circle at 100% 0%,rgba(19,172,51,.13),transparent 45%);
+ border:1px solid rgba(19,172,51,.29);box-sizing:border-box;
+ box-shadow:inset 0 0 24px rgba(19,150,50,.035);
+}
+.rh-metric::before {
+ content:"";position:absolute;top:0;left:0;width:38%;height:2px;
+ background:linear-gradient(90deg,#38CF72,transparent);
+ box-shadow:0 0 12px rgba(19,172,51,.38);
+}
+.rh-metric-name {font-size:.69rem;letter-spacing:.055em;font-weight:800;color:#91BF9D;text-transform:uppercase;line-height:1.4;}
+.rh-metric-value {
+ margin:.48rem 0 .4rem;font-size:clamp(1.66rem,2.38vw,2.40rem);
+ line-height:1.07;letter-spacing:-.055em;
+ font-weight:800;color:#E7FFE9;font-family:"Cascadia Mono","Segoe UI",monospace;
+ white-space:nowrap;text-shadow:0 0 22px rgba(38,188,85,.20);
+}
+.rh-metric-detail {font-size:.71rem;color:#BDD7C3;line-height:1.42;font-weight:600;}
+.rh-metric-foot {margin-top:.58rem;font-size:.60rem;letter-spacing:.06em;color:#DCC286;font-weight:750;text-transform:uppercase;}
 .rh-model-label {font-family:"Cascadia Mono",Consolas,monospace;font-size:.65rem;color:#87B49A;letter-spacing:.06em;}
 .rh-note {font-size:.72rem;color:#9CBAA6;line-height:1.55;}
 .rh-legend {display:flex;align-items:center;gap:1.2rem;flex-wrap:wrap;margin:.35rem 0 1rem;}
 .rh-legend span {display:inline-flex;align-items:center;gap:.4rem;font-size:.63rem;color:#A3C4AE;}
 .rh-key {display:inline-block;width:21px;height:3px;background:#32C867;}
 .rh-key.is-projected {background:#BC96F3;border-top:1px dashed #BC96F3;}
-@media(max-width:1000px){.rh-metric{min-height:115px;padding:.75rem}.rh-metric-value{font-size:1.2rem;}}
+@media(max-width:1150px){
+  .rh-metric {min-height:162px;padding:.9rem .85rem;}
+  .rh-metric-value {font-size:clamp(1.5rem,2.15vw,2.02rem);}
+}
+@media(max-width:700px){
+  .rh-metric {min-height:140px;}
+  .rh-metric-value {font-size:clamp(1.42rem,4vw,1.85rem);}
+}
 </style>
 """
 
