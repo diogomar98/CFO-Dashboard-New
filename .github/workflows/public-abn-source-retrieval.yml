@@ -1,0 +1,33 @@
+name: Public ABN source retrieval
+
+on:
+  pull_request:
+    paths:
+      - "research/fetch_public_abn_sources.py"
+      - ".github/workflows/public-abn-source-retrieval.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  retrieve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install public site archive parser
+        run: python -m pip install requests beautifulsoup4
+      - name: Download public quarterly Excel originals, validate ZIPs and record hashes
+        run: python research/fetch_public_abn_sources.py --out research/evidence
+      - name: Preserve original workbooks and source manifest for four-eyes check
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: abn-public-factsheets-source-evidence
+          path: research/evidence/
+          retention-days: 30
+          if-no-files-found: warn
