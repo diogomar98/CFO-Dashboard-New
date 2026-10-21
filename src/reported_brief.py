@@ -163,6 +163,19 @@ BRIEF_CSS = """
 .rb-news-frame { padding:1rem 1.1rem; border:1px solid rgba(82,125,155,.30);background:rgba(15,25,29,.60); }
 .rb-news-head { font-size:.76rem;color:#BBD4DB;font-weight:700; }
 .rb-news-note { font-size:.7rem;color:#97AFB2;line-height:1.55; margin-top:.3rem; }
+/* Existing external-news feed colours/classes, full-width responsive layout. */
+.rb-news-wide {width:100%;box-sizing:border-box;padding:.85rem 1rem .9rem;}
+.rb-news-clarifier {color:#91ABA1;font-size:.70rem;line-height:1.5;padding:.25rem 0 .75rem;}
+.rb-news-clarifier strong {color:#B6CCE0;}
+.rb-news-grid {display:grid;grid-template-columns:repeat(2,minmax(0,1fr));column-gap:1.7rem;row-gap:.2rem;}
+.rb-news-grid .rb-news-item {min-width:0;box-sizing:border-box;border-top:1px solid rgba(124,166,201,.18);padding:.8rem 0 .7rem;}
+.rb-news-grid .feed-headline {overflow-wrap:anywhere;}
+.rb-news-grid .feed-foot {flex-wrap:wrap;}
+.rb-news-grid .feed-item-top {row-gap:.3rem;}
+@media (max-width:820px) {
+  .rb-news-grid {grid-template-columns:1fr;}
+  .rb-news-wide .feed-frame-head {flex-wrap:wrap;}
+}
 @media (max-width:1000px){
     .rb-primary {height:175px;padding:.7rem;}
     .rb-primary-reading {display:flex;align-items:center;}
@@ -450,17 +463,117 @@ def _expanded_grid(s, frame):
             _details(frame, focus, unit, name, s)
 
 
+def load_existing_news():
+    """The same CSV-backed external feed and ranking as Synthetic Morning Brief.
+
+    This returns *prototype* news, not factsheet financials or verified live news.
+    """
+    news = load_news_signals()
+    geo = load_news_geo_impact()
+    if news is None or news.empty:
+        return pd.DataFrame()
+    if not {"news_id", "published_date", "headline"}.issubset(news.columns):
+        return pd.DataFrame()
+    news = news.copy()
+    news["published_date"] = pd.to_datetime(news["published_date"], errors="coerce")
+    news = news.dropna(subset=["published_date", "headline"])
+    if news.empty:
+        return news
+    if geo is not None and not geo.empty and "news_id" in geo.columns:
+        side = geo.drop(columns=["published_date", "impact_direction"], errors="ignore")
+        news = news.merge(side, on="news_id", how="inner")
+    if news.empty:
+        return news
+    latest = news["published_date"].max()
+    recent = news[news["published_date"] >= latest - pd.Timedelta(days=13)].copy()
+    if recent.empty:
+        return recent
+    if {"geo_impact_score", "country"}.issubset(recent.columns):
+        recent = recent.sort_values(
+            ["news_id", "geo_impact_score", "country"],
+            ascending=[True, False, True],
+        )
+    recent = recent.drop_duplicates(subset="news_id", keep="first")
+    ordering = [k for k in ("relevance_score", "published_date") if k in recent]
+    return recent.sort_values(ordering, ascending=[False] * len(ordering)).reset_index(drop=True)
+
+
+def _prototype_article(article):
+    """The original external news layout, colours, links and confidence badge."""
+    def val(key, default=""):
+        item = article.get(key, default)
+        return default if pd.isna(item) else str(item)
+
+    category = html.escape(val("category", "News"))
+    headline = html.escape(val("headline"))
+    source = html.escape(val("source", "External source"))
+    level = val("potential_impact_level", "UNRATED").upper()
+    if level not in {"HIGH", "MEDIUM", "LOW"}:
+        level = "UNRATED"
+    date = pd.to_datetime(article["published_date"]).strftime("%d %b %Y")
+    detail = html.escape(val("bank_impact_summary")[:200])
+    metric = html.escape(val("primary_affected_metric", "Not classified"))
+    try:
+        confidence = float(article.get("confidence_score", float("nan")))
+    except (TypeError, ValueError):
+        confidence = float("nan")
+    if pd.notna(confidence):
+        conf = confidence_badge(confidence_probability(
+            confidence, "Prototype classifier confidence in potential bank impact"
+        ))
+    else:
+        conf = '<span class="feed-source">Confidence unavailable</span>'
+    url = val("source_url").strip()
+    parsed = urlsplit(url)
+    if parsed.scheme.lower() in {"http", "https"} and parsed.netloc:
+        source_link = (
+            f'<a class="news-source-link" href="{html.escape(url, quote=True)}" '
+            f'target="_blank" rel="noopener noreferrer">{source} ↗</a>'
+        )
+    else:
+        source_link = f'<span class="feed-source">{source} · source link unavailable</span>'
+    return (
+        '<article class="feed-item rb-news-item">'
+        '<div class="feed-item-top">'
+        f'<span class="feed-tag">{category}</span>'
+        f'<span class="feed-date">{date}</span>'
+        f'<span class="feed-status status-impact-{level.lower()}">{html.escape(level.title())} impact</span>'
+        '</div>'
+        f'<div class="feed-headline">{headline}</div>'
+        f'<div class="feed-detail">{detail}</div>'
+        f'<div class="feed-detail"><strong>Potential metric</strong> {metric}</div>'
+        '<div class="feed-foot">' + conf + source_link + '</div></article>'
+    )
+
+
 def _external_news():
     st.markdown("### External news & developments")
+    articles = load_existing_news()
+    if articles.empty:
+        content = (
+            '<div class="feed-empty">No original news records available. '
+            'Keep news_signals.csv and news_geo_impact.csv in the Databricks '
+            'data folder to enable the prototype feed.</div>'
+        )
+        last_update = "News data unavailable"
+    else:
+        # Same four highest-relevance headlines shown in Synthetic Morning Brief.
+        content = '<div class="rb-news-grid">' + "".join(
+            _prototype_article(row) for _, row in articles.head(4).iterrows()
+        ) + '</div>'
+        last_update = "Latest sample " + articles["published_date"].max().strftime("%d %b %Y")
     render_html(
-        '<div class="rb-news-frame">'
-        '<div class="rb-news-head">Verified external news · source connection pending</div>'
-        '<div class="rb-news-note">'
-        'The news section is retained below the financial overview, using '
-        'the existing cockpit layout. No external source has been connected '
-        'for Real Data mode yet. Synthetic news stories and prototype '
-        'impact classifications are deliberately excluded.'
-        '</div></div>'
+        '<section class="feed-frame is-external rb-news-wide">'
+        '<div class="feed-frame-head">'
+        '<span class="feed-frame-title">External news</span>'
+        f'<span class="feed-frame-note">Original news CSVs · {html.escape(last_update)}</span>'
+        '</div>'
+        '<div class="rb-news-clarifier">'
+        'Original prototype feed, including source links and impact/confidence '
+        'classifications. These classifications are <strong>illustrative</strong> '
+        'and are not verified against ABN AMRO reported financial actuals. '
+        'This feed does not refresh live.'
+        '</div>' + content + '</section>'
     )
 
 
