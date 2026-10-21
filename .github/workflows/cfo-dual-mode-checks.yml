@@ -9,12 +9,16 @@ on:
       - "src/real_data_mode.py"
       - "src/reported_brief.py"
       - "src/reported_horizon.py"
-      - "src/reported_horizon_engine.py"
+      - "src/reported_horizon_engine.py src/public_horizon_engine.py"
+      - "src/public_horizon_engine.py"
+      - "data/abn_group_nii_nim_2021_public.csv"
+      - "data/ecb_dfr_quarterly_2021_public.csv"
       - "src/kpi_sparklines.py"
       - "data/abn_*.csv"
       - "tests/test_dual_mode.py"
       - "tests/test_reported_brief.py"
       - "tests/test_reported_horizon.py"
+      - "tests/test_public_horizon.py"
       - ".github/workflows/cfo-dual-mode-checks.yml"
   workflow_dispatch:
 
