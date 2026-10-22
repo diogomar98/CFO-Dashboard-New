@@ -110,7 +110,7 @@ def _live_cet1_thread(evidence):
         with st.spinner("Investigating sourced Group CET1 figures using the ABN AI Gateway…"):
             try:
                 result=answer_reported_cet1(question,evidence)
-            except (ValueError,RuntimeError,Exception) as exc:
+            except Exception as exc:
                 # Never print raw HTTP errors or token-bearing request details.
                 st.error(
                     "The AI Gateway did not return an answer. Check that the "
