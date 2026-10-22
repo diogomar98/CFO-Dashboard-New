@@ -8,8 +8,9 @@ from unittest.mock import patch
 from src.reported_news_partner import (
     DFR_URL, OFFICIAL_FEEDS, classify_headlines, fetch_ecb_articles,
     parse_ecb_rss, parse_ecb_rate_csv, verified_rate_scenario,
+    load_official_news_snapshot, _safe_source_error,
 )
-from src.reported_news import current_verified_ecb_change
+from src.reported_news import current_verified_ecb_change, recent_official_articles
 from src.public_horizon_engine import load_public_horizon_inputs
 from src.real_data_mode import load_reported
 
@@ -131,6 +132,61 @@ class ReportedNewsTests(unittest.TestCase):
             self.financial,events=[(date(2026,6,11),2.25)],
             now=date(2026,10,22)
         ))
+
+    def test_saved_official_news_is_real_dated_and_host_allowlisted(self):
+        entries,metadata=load_official_news_snapshot()
+        self.assertGreaterEqual(len(entries),10)
+        self.assertEqual(metadata["mode"],"snapshot")
+        self.assertIn("2026-10-22",metadata["retrieved_at_utc"])
+        self.assertTrue(all(a["source"].startswith("ECB ") for a in entries))
+        self.assertTrue(all(a["url"].startswith("https://www.ecb.europa.eu/")
+                            for a in entries))
+        self.assertTrue(all(a.get("published") and a.get("headline")
+                            for a in entries))
+
+    def test_blocked_abn_egress_keeps_real_snapshot_and_status(self):
+        with patch("src.reported_news.load_real_public_news",
+                   return_value=([],["ECB press releases: Outbound HTTPS/DNS connection failed"])):
+            items,warnings,status=recent_official_articles(include_status=True)
+        self.assertGreaterEqual(len(items),10)
+        self.assertEqual(status["mode"],"snapshot")
+        self.assertTrue(any("Live ECB feeds unavailable" in x for x in warnings))
+        self.assertFalse(any("Synthetic" in x for x in warnings))
+        self.assertNotIn("rate_shock_bps",items[0])
+
+    def test_live_feed_takes_priority_over_saved_snapshot(self):
+        with patch("src.reported_news.load_real_public_news",
+                   return_value=(self.articles,[])):
+            with patch("src.reported_news.load_official_news_snapshot") as loader:
+                items,warnings,status=recent_official_articles(include_status=True)
+                loader.assert_not_called()
+        self.assertEqual(status["mode"],"live")
+        self.assertEqual(items,self.articles)
+        self.assertFalse(warnings)
+
+    def test_source_diagnostics_suppress_internal_proxy_details(self):
+        import requests
+        for exc,label in (
+            (requests.exceptions.SSLError("corp_proxy_login_secret"),"TLS/certificate"),
+            (requests.exceptions.ProxyError("corp_proxy_login_secret"),"Corporate proxy"),
+            (requests.exceptions.ConnectTimeout("corp_proxy_login_secret"),"timed out"),
+        ):
+            detail=_safe_source_error(exc)
+            self.assertIn(label,detail)
+            self.assertNotIn("secret",detail)
+
+    def test_news_html_is_clearly_dated_not_a_synthetic_fallback(self):
+        code=Path("src/reported_news.py").read_text(encoding="utf-8")
+        brief=Path("src/reported_brief.py").read_text(encoding="utf-8")
+        self.assertIn("recent_official_articles(include_status=True)",code)
+        self.assertIn("News connection diagnostics",code)
+        self.assertIn("Retry live ECB connection",code)
+        self.assertIn("news is unavailable",code.lower())
+        self.assertIn("recent_official_articles(include_status=True)",brief)
+        self.assertIn("Saved official ECB headlines",brief)
+        self.assertIn("Why it matters",brief)
+        self.assertIn("rb-news-grid",brief)
+        self.assertNotIn("load_existing_news()",brief[brief.index("def _external_news()"):])
 
     def test_real_routing_and_synthetic_mode_untouched(self):
         mode=Path("src/real_data_mode.py").read_text(encoding="utf-8")
