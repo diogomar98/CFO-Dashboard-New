@@ -128,7 +128,7 @@ class PublicScenarioTests(unittest.TestCase):
         self.assertIn("def render_scenario(s)",original)
         self.assertIn("BETA_UNCERTAINTY_PP",original)
         main=Path("main.py").read_text(encoding="utf-8")
-        self.assertIn("render_scenario",main)
+        self.assertIn("from src.modules import MODULE_METADATA, RENDERERS",main)
 
 
 if __name__=="__main__":
