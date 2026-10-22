@@ -12,7 +12,7 @@ from src.public_horizon_engine import load_public_horizon_inputs
 from src.public_scenario_engine import NEUTRAL_INPUTS
 from src.reported_news_partner import (
     DFR_URL, OFFICIAL_FEEDS, classify_headlines, fetch_ecb_articles,
-    fetch_ecb_rate_events, verified_rate_scenario,
+    fetch_ecb_rate_events, verified_rate_scenario, load_official_news_snapshot,
 )
 
 
@@ -31,10 +31,26 @@ def load_verified_ecb_rate_events():
     return fetch_ecb_rate_events()
 
 
-def recent_official_articles():
-    """Read-only source-backed feed for News and Morning Brief."""
-    records, warnings = load_real_public_news()
-    return records, warnings
+def recent_official_articles(*, include_status=False):
+    """Official live RSS first, timestamped *real* ECB snapshot if blocked.
+
+    This is never a Synthetic feed. The source mode must be visible in the UI
+    so saved headlines cannot be mistaken for live monitoring.
+    """
+    live, warnings = load_real_public_news()
+    if live:
+        mode = {"mode":"live","retrieved_at_utc":None,"count":len(live)}
+        return (live,warnings,mode) if include_status else (live,warnings)
+    saved,meta=load_official_news_snapshot()
+    if saved:
+        warnings=list(warnings)+[
+            "Live ECB feeds unavailable: displaying a point-in-time official snapshot, "
+            "not current monitoring"
+        ]
+        return (saved,warnings,meta) if include_status else (saved,warnings)
+    warnings=list(warnings)+[meta.get("error","No official-source news available")]
+    mode={"mode":"none","retrieved_at_utc":None,"count":0}
+    return ([],warnings,mode) if include_status else ([],warnings)
 
 
 def current_verified_ecb_change(reporting_frame, *, events=None, now=None):
@@ -118,7 +134,31 @@ def render_reported_news(s):
         "public headlines. It never calculates or invents a bank stress amount."
     )
     report=load_public_horizon_inputs(s.reported_group)
-    fresh,warnings=recent_official_articles()
+    if st.button("↻ Retry live ECB connection",key="rn_retry_official_feeds"):
+        load_real_public_news.clear()
+        load_verified_ecb_rate_events.clear()
+        st.rerun()
+    fresh,warnings,status=recent_official_articles(include_status=True)
+    if status["mode"]=="snapshot":
+        st.warning(
+            "Live ECB news is unavailable from this Databricks environment. "
+            "Displaying **real ECB articles saved on "
+            +status["retrieved_at_utc"][:16].replace("T"," ")+" UTC**. "
+            "This is a dated snapshot, not up-to-date monitoring."
+        )
+    elif status["mode"]=="none":
+        st.error("Neither the official ECB feeds nor the verified backup snapshot is available.")
+    else:
+        st.caption("News source status: live official ECB RSS feed.")
+    if warnings:
+        with st.expander("News connection diagnostics",expanded=status["mode"]!="live"):
+            for warning in warnings:
+                st.write("• "+warning)
+            st.caption(
+                "If this shows outbound HTTPS, proxy or TLS failures, request "
+                "Databricks Apps egress approval for the official ECB RSS hosts. "
+                "Do not disable TLS verification or upload credentials."
+            )
     by_status={}
     if fresh:
         # One bounded AI Gateway request for top official headlines.
@@ -139,7 +179,10 @@ def render_reported_news(s):
         if by_status.get(article["id"],{}).get("relevance")=="HIGH"
     )
     c1,c2,c3=st.columns(3)
-    c1.metric("Official announcements",str(len(fresh)))
+    c1.metric(
+        "Official headlines ("+("Live" if status["mode"]=="live" else "Saved" if status["mode"]=="snapshot" else "None")+")",
+        str(len(fresh)),
+    )
     c2.metric("AI high relevance",str(actionable_count) if by_status else "Unavailable")
     c3.metric("Rate-stress support","ECB DFR only")
     st.caption(
@@ -153,12 +196,16 @@ def render_reported_news(s):
     except Exception:
         rate_events=None
         official_change=None
-        warnings.append("Official ECB rate-data verification unavailable")
+        st.caption(
+            "ECB rate API request failed independently of the headlines. "
+            "Scenario prefill is disabled until the official ECB rate API "
+            "can be reached; saved headlines are never numerical shock evidence."
+        )
     feed_col,scenario_col=st.columns([1.4,1],gap="large")
     with feed_col:
         st.markdown("#### Recent developments")
         if not fresh:
-            st.info("No verified public headlines could be retrieved; there is no synthetic fallback.")
+            st.info("No official ECB headlines are currently available. Nothing synthetic is shown.")
         for article in fresh[:10]:
             render_html(_card(article,by_status.get(article["id"],{})))
             if rate_events is not None:
@@ -220,7 +267,7 @@ def render_reported_news(s):
             "4. Prepare, but never silently execute, a scenario."
         )
         st.caption(
-            "The app refreshes its feeds while in use (30-minute cache). "
-            "Continuous unattended monitoring needs a separate approved "
-            "Databricks Job; this release does not claim to run in the background."
+            "Live retrieval is cached for 30 minutes while in use. A saved "
+            "snapshot is historical, not monitored. Continuous unattended "
+            "monitoring needs an approved Databricks Job."
         )
