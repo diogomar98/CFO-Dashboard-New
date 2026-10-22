@@ -65,17 +65,23 @@ class FloatingCopilotTests(unittest.TestCase):
 
     def test_arithmetic_charts_are_not_model_generated(self):
         bridge_chart=_capital_bridge_chart(self.bridge).to_dict()
-        self.assertEqual(bridge_chart["data"]["values"][0]["Effect"],"CET1 capital")
+        # Altair stores Pandas inline observations under the datasets registry.
+        bridge_rows=bridge_chart.get("data",{}).get("values")
+        if bridge_rows is None:
+            bridge_rows=bridge_chart["datasets"][bridge_chart["data"]["name"]]
+        self.assertEqual(bridge_rows[0]["Effect"],"CET1 capital")
         self.assertAlmostEqual(
-            bridge_chart["data"]["values"][0]["pp"],
+            bridge_rows[0]["pp"],
             self.bridge["capital_component_pp"], places=7
         )
         self.assertAlmostEqual(
-            bridge_chart["data"]["values"][1]["pp"],
+            bridge_rows[1]["pp"],
             self.bridge["rwa_component_pp"], places=7
         )
         ratio_chart=_quarter_comparison_chart(self.bridge).to_dict()
-        observations=ratio_chart["data"]["values"]
+        observations=ratio_chart.get("data",{}).get("values")
+        if observations is None:
+            observations=ratio_chart["datasets"][ratio_chart["data"]["name"]]
         self.assertEqual(len(observations),2)
         self.assertEqual(observations[0]["Quarter"],"Q1 2026")
         self.assertEqual(observations[1]["Quarter"],"Q2 2026")
