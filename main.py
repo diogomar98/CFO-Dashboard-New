@@ -280,8 +280,8 @@ news_focus = html.escape(str(s.geo_focus["country"])) if s.geo_focus is not None
 
 lenses = [
     (
-        "news", "◇", "News", "External feed pending",
-        "No source-backed news impact model yet", s.ratings["news_attention"], None,
+        "news", "◇", "News", "Official ECB news · AI relevance",
+        "Verified ECB rates → reviewed What-If", s.ratings["news_attention"], None,
     ),
     (
         "treasury", "△", "Treasury", "Reported aggregate holdings",
