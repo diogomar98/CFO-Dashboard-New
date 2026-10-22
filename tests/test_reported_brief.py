@@ -89,10 +89,14 @@ class ReportedBriefTests(unittest.TestCase):
     def test_real_morning_uses_official_feeds_with_original_news_card_style(self):
         code = Path("src/reported_brief.py").read_text(encoding="utf-8")
         self.assertIn("from src.reported_news import recent_official_articles",code)
-        self.assertIn("Official ECB RSS",code)
+        self.assertIn("Saved official ECB headlines",code)
         self.assertIn("is-external rb-news-wide",code)
         self.assertIn("rb-news-grid",code)
-        self.assertIn("No synthetic news records have been substituted",code)
+        self.assertIn("No synthetic items have been inserted",code)
+        self.assertIn("Live ECB access failed",code)
+        self.assertIn("Why it matters",code)
+        self.assertIn("Potential metric",code)
+        self.assertIn("Open News Intelligence",code)
         self.assertIn("src.reported_brief",
                       Path("src/real_data_mode.py").read_text(encoding="utf-8"))
 
