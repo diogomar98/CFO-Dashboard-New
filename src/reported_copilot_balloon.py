@@ -277,97 +277,123 @@ def _send(question,evidence,history):
 
 
 def render_cet1_chat(evidence, *, compact=True):
-    """Full multi-turn interaction reused in balloon and existing Copilot page."""
-    bridge=build_cet1_bridge(evidence)
+    """Dedicated Ask CFO Copilot route; now supports any sourced finance question."""
     history=_get_thread(evidence)
-    st.caption(
-        "Your follow-up questions keep the previous conversation as context. "
-        "Only the cited factsheet and arithmetic are authoritative."
-    )
-    controls=st.columns([1.9,1],gap="small")
-    with controls[0]:
-        initial=st.button(
-            "Investigate Q2 CET1",key="real_cfo_start_"+("compact" if compact else "full"),
-            use_container_width=True,disabled=bool(history),
-        )
-    with controls[1]:
-        clear=st.button(
-            "New conversation",key="real_cfo_clear_"+("compact" if compact else "full"),
-            use_container_width=True,
-        )
+    st.caption("Ask about capital, profitability, liquidity, segments or reported trends. "
+               "Unavailable business causes and figures are identified, not invented.")
+    left,right=st.columns([2,1])
+    with left:
+        start=st.button("Investigate Q2 CET1",key="real_cfo_start_"+str(compact),
+                        use_container_width=True,disabled=bool(history))
+    with right:
+        clear=st.button("New conversation",key="real_cfo_clear_"+str(compact),
+                        use_container_width=True)
     if clear:
         history.clear()
-
-    if history:
-        # Height was added before keyed containers, but older ABN runtimes may
-        # lack it too. Keep follow-up chat functional without either argument.
-        container_args = (
-            {"height":260 if compact else 420}
-            if "height" in inspect.signature(st.container).parameters else {}
-        )
-        with st.container(**container_args):
-            for message in history[-16:]:
-                with st.chat_message(message["role"]):
-                    st.markdown(message["content"])
-                    if message["role"]=="assistant":
-                        st.caption("Model interpretation · source review required")
-    else:
-        st.info("Start the CET1 investigation or enter your own first question.")
-    with st.form("real_cfo_chat_form_"+("compact" if compact else "full"),
-                 clear_on_submit=True):
+        st.rerun()
+    # The dedicated central view previously placed the composer over replies.
+    # A marked, max-height scroll container keeps all replies fully accessible
+    # even in the ABN runtime without st.container(height=).
+    with st.container():
+        render_html('<span class="cfo-thread-history-marker" aria-hidden="true"></span>')
+        if not history:
+            st.info("Ask the CFO Copilot a question about the reported data.")
+        visible=history[-16:]
+        for index,item in enumerate(visible):
+            with st.chat_message(item["role"]):
+                st.markdown(item["content"])
+                if item["role"]=="assistant":
+                    st.caption("Model interpretation · factsheet figures are authoritative")
+                    if index==len(visible)-1:
+                        _show_answer_visual(evidence,history)
+    st.divider()
+    with st.form("real_cfo_chat_form_"+str(compact),clear_on_submit=True):
         question=st.text_area(
-            "Ask a follow-up",placeholder=(
-                "For example: What does the RWA contribution mean? "
-                "What evidence is needed to establish the cause?"
-            ),max_chars=800,height=72,
-            key="real_cfo_question_"+("compact" if compact else "full"),
+            "Ask a follow-up",
+            placeholder="Ask about NII, CET1, liquidity, profitability or trends…",
+            max_chars=1200,height=78,
+            key="real_cfo_question_"+str(compact),
         )
         asked=st.form_submit_button("Send question",use_container_width=True)
-    if initial:
+    if start:
         _send(DEFAULT_QUESTION,evidence,history)
-    elif asked and question:
+    elif asked and question.strip():
         _send(question,evidence,history)
 
 
-def _render_jarvis_conversation(evidence):
-    """Dedicated floating-panel layout; standalone central Copilot untouched."""
-    bridge=build_cet1_bridge(evidence)
-    history=_get_thread(evidence)
+def _show_answer_visual(evidence,history):
+    """Only factsheet-derived chart data; never parse the language-model text."""
+    last_question=next((
+        m["content"].lower() for m in reversed(history) if m["role"]=="user"
+    ),"")
+    candidates=(
+        ("cet1_ratio_pct",("cet1","capital ratio")),
+        ("nim_bps",("nim","interest margin")),
+        ("nii_m",("nii","interest income")),
+        ("net_profit_m",("net profit","profit")),
+        ("lcr_pct",("lcr","liquidity coverage")),
+        ("deposits_m",("deposits","deposit growth")),
+        ("loans_m",("loans","lending")),
+        ("rwa_m",("rwa","risk-weighted")),
+    )
+    name=next((field for field,phrases in candidates
+               if any(p in last_question for p in phrases)),None)
+    if not name:
+        return
+    with st.expander("Show financial evidence",expanded=False):
+        if name in ("cet1_ratio_pct","rwa_m") and evidence["scope"]=="ABN AMRO Group":
+            render_cet1_visuals(build_cet1_bridge(evidence),compact=True)
+            return
+        history_rows=evidence.get("quarterly_history",[])
+        if name in ("nii_m","nim_bps") and evidence.get("group_nii_nim_history_2021"):
+            points=[{"quarter":r["quarter"],"value":r.get(name)}
+                    for r in evidence["group_nii_nim_history_2021"]]
+        else:
+            points=[{"quarter":r["quarter"],"value":r["values"].get(name)}
+                    for r in history_rows]
+        data=pd.DataFrame([r for r in points if r["value"] is not None])
+        if data.empty:
+            st.caption("No reported observations are available for this chart.")
+            return
+        plot=alt.Chart(data).mark_line(color="#39C971",point=True).encode(
+            x=alt.X("quarter:N",sort=data["quarter"].tolist(),title="Reported quarter",
+                    axis=alt.Axis(labelAngle=-35,labelColor="#A8D8BB")),
+            y=alt.Y("value:Q",title=name,scale=alt.Scale(zero=False)),
+            tooltip=["quarter:N",alt.Tooltip("value:Q",format=",.2f")],
+        )
+        st.altair_chart(plot.properties(height=185),use_container_width=True)
+        st.caption("Published observations only · source: ABN AMRO quarterly factsheets.")
 
-    # Keep the composer's contents across a contextual handoff from Morning
-    # Brief. Never copy these prompts to Synthetic session state.
+
+def _render_jarvis_conversation(evidence):
+    """Larger Jarvis chat; message history and normal-flow input are siblings."""
+    history=_get_thread(evidence)
     queued=st.session_state.pop("real_cfo_question_compact",None)
     if queued:
         st.session_state["jarvis_composer_text"]=queued
 
-    # Scrollable, separate conversation area. The composer is a SIBLING of
-    # this container, never absolutely overlaid on the model's answer.
     with st.container():
         render_html('<span class="jarvis-history-marker" aria-hidden="true"></span>')
         if not history:
-            st.info("Ask Jarvis about Group CET1, capital or risk-weighted assets.")
-            if st.button("Investigate Q2 2026 CET1",
-                         key="jarvis_first_investigation",
+            st.info("Ask Jarvis about any reported financial metric or business line.")
+            if st.button("Investigate Q2 CET1",key="jarvis_first_investigation",
                          use_container_width=True):
                 _send(DEFAULT_QUESTION,evidence,history)
-        for index,message in enumerate(history[-16:]):
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
-                if message["role"]=="assistant":
-                    st.caption("AI interpretation · ABN factsheet · review underlying causes")
-                    if index==len(history[-16:])-1:
-                        # Evidence is deterministic, sourced and placed AFTER
-                        # the model reply (inside the scrollable body).
-                        with st.expander("Show CET1 visual evidence",expanded=False):
-                            render_cet1_visuals(bridge,compact=True)
+        visible=history[-16:]
+        for index,item in enumerate(visible):
+            with st.chat_message(item["role"]):
+                st.markdown(item["content"])
+                if item["role"]=="assistant":
+                    st.caption("AI interpretation · reported evidence only")
+                    if index==len(visible)-1:
+                        _show_answer_visual(evidence,history)
 
-    # This footer follows the scroll area in normal Streamlit layout and
-    # cannot cover earlier assistant replies.
+    # Separate normal-flow form after bounded chat. It does not cover messages.
     with st.form("jarvis_composer_form",clear_on_submit=True):
         question=st.text_area(
             "Ask Jarvis a follow-up",
-            placeholder="E.g. What does the RWA contribution mean?",
-            key="jarvis_composer_text",max_chars=800,height=70,
+            placeholder="E.g. Why did NIM change from 2022 to 2023?",
+            key="jarvis_composer_text",max_chars=1200,height=78,
         )
         asked=st.form_submit_button("Send to Jarvis →",use_container_width=True)
     if asked and question.strip():
