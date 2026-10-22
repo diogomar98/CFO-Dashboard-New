@@ -11,7 +11,7 @@ from src.reported_copilot_partner import (
 )
 from src.reported_copilot_balloon import (
     _capital_bridge_chart, MAX_STORED_MESSAGES,
-    prepare_cet1_investigation, _popover_options,
+    prepare_cet1_investigation,
 )
 
 
@@ -85,7 +85,7 @@ class FloatingCopilotTests(unittest.TestCase):
     def test_floating_launch_in_real_home_and_report_only(self):
         app=Path("main.py").read_text(encoding="utf-8")
         self.assertIn('if is_real:',app)
-        self.assertIn('if module != "copilot":',app)
+        self.assertNotIn('if module != "copilot":',app)
         self.assertIn('elif is_real:',app)
         self.assertIn("render_floating_copilot(s)",app)
         self.assertIn("RENDERERS[module](s)",app)
@@ -97,8 +97,15 @@ class FloatingCopilotTests(unittest.TestCase):
         self.assertIn("st.altair_chart",view)
         self.assertIn("Visual breakdown",view)
         self.assertNotIn('st.container(key=',view)
-        self.assertIn('with st.popover("✦ CFO Copilot", **_popover_options()):',view)
-        self.assertIn('div[data-testid="stPopover"]',view)
+        self.assertNotIn("st.popover(",view)
+        self.assertIn('with st.container():',view)
+        self.assertIn('st.button("✦ Jarvis"',view)
+        self.assertIn('st.button("✕"',view)
+        self.assertIn('"jarvis_open"',view)
+        self.assertIn('jarvis-history-marker',view)
+        self.assertIn('max-height:calc(min(700px,100dvh - 42px) - 235px)',view)
+        self.assertIn('with st.form("jarvis_composer_form"',view)
+        self.assertIn('with st.chat_message(message["role"])',view)
         self.assertNotIn('_quarter_comparison_chart',view)
         self.assertNotIn("requests.post",view)
         self.assertNotIn("genie_partner",view)
@@ -117,12 +124,7 @@ class FloatingCopilotTests(unittest.TestCase):
         with patch("src.reported_copilot_balloon.st.session_state",{}) as state:
             prepare_cet1_investigation()
             self.assertEqual(state["real_cfo_question_compact"],DEFAULT_QUESTION)
-            self.assertTrue(state["real_cfo_popover_open"])
-        opts=_popover_options()
-        self.assertIn("use_container_width",opts)
-        # On compatible Streamlit builds, key/on_change allow auto-opening.
-        if "key" in opts:
-            self.assertEqual(opts["key"],"real_cfo_popover_open")
+            self.assertTrue(state["jarvis_open"])
         brief=Path("src/reported_brief.py").read_text(encoding="utf-8")
         self.assertIn("Ask Copilot about CET1",brief)
         self.assertIn('metric == "cet1_ratio_pct"',brief)
