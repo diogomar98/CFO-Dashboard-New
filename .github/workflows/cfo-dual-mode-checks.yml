@@ -29,6 +29,7 @@ on:
       - "tests/test_public_scenario.py"
       - "tests/test_reported_copilot.py"
       - "tests/test_reported_copilot_balloon.py"
+      - "tests/test_reported_general_chat.py"
       - ".github/workflows/cfo-dual-mode-checks.yml"
   workflow_dispatch:
 
