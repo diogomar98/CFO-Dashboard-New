@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import streamlit as st
 
 from src.hud import navigate_to_module, render_html
+from src.reported_brief import BRIEF_CSS, _official_article_card
 from src.public_horizon_engine import load_public_horizon_inputs
 from src.public_scenario_engine import NEUTRAL_INPUTS
 from src.reported_news_partner import (
@@ -51,6 +52,22 @@ def recent_official_articles(*, include_status=False):
     warnings=list(warnings)+[meta.get("error","No official-source news available")]
     mode={"mode":"none","retrieved_at_utc":None,"count":0}
     return ([],warnings,mode) if include_status else ([],warnings)
+
+
+def official_article_classifications(articles):
+    """Run the same existing corporate AI Gateway over locally saved articles.
+
+    Uses only public title/excerpt, so ABN's blocked Internet does NOT block
+    the classification call. A Gateway error keeps scores unrated; no fabricated
+    relevance, confidence or financial effects are inserted.
+    """
+    if not articles:
+        return {},None
+    try:
+        result=load_real_news_ai_classification(articles[:8])
+        return {item["id"]:item for item in result},None
+    except Exception:
+        return {},"AI Gateway returned no usable classification"
 
 
 def current_verified_ecb_change(reporting_frame, *, events=None, now=None):
@@ -98,40 +115,20 @@ def _queue_rate_scenario(evidence):
     navigate_to_module("scenario")
 
 
-def _card(article,classification):
-    """Reuses cockpit feed tone; all external text and URLs escaped."""
-    title=html.escape(article["headline"])
-    source=html.escape(article["source"])
-    day=html.escape(article["published"][:10])
-    excerpt=html.escape(article["summary"][:240])
-    rank=classification.get("relevance","UNRATED")
-    if rank not in {"HIGH","MEDIUM","LOW"}:
-        rank="UNRATED"
-    context=html.escape(classification.get("reason","Not yet classified."))
-    metric=html.escape(classification.get("metric","Not evaluated"))
-    url=html.escape(article["url"],quote=True)
-    return (
-        '<article class="feed-item rb-news-item">'
-        '<div class="feed-item-top">'
-        f'<span class="feed-tag">OFFICIAL ECB</span><span class="feed-date">{day}</span>'
-        f'<span class="feed-status status-impact-{rank.lower()}">{rank.title()}</span>'
-        '</div>'
-        f'<div class="feed-headline">{title}</div>'
-        f'<div class="feed-detail">{excerpt}</div>'
-        f'<div class="feed-detail"><strong>AI watch</strong> {metric}: {context}</div>'
-        '<div class="feed-foot">'
-        '<span class="feed-source">Potential relevance only · not a bank impact estimate</span>'
-        f'<a class="news-source-link" href="{url}" target="_blank" rel="noopener noreferrer">'
-        f'{source} ↗</a></div></article>'
-    )
+def _card(article, classification, *, saved=False):
+    """Same original coloured external-news card as Synthetic Morning Brief."""
+    return _official_article_card(article,classification,saved=saved)
+
 
 
 def render_reported_news(s):
+    render_html(BRIEF_CSS)
     st.markdown("### News Intelligence · verified public sources")
     st.caption(
-        "Official ECB press and statistical RSS feeds, periodically refreshed "
-        "while the dashboard is used. The existing AI Gateway triages the "
-        "public headlines. It never calculates or invents a bank stress amount."
+        "Official ECB news articles are read from the live feed or saved "
+        "point-in-time source snapshot. The existing corporate AI Gateway "
+        "can rank and assess the relevance of locally stored headlines. "
+        "Neither confidence nor relevance establishes a bank impact."
     )
     report=load_public_horizon_inputs(s.reported_group)
     if st.button("↻ Retry live ECB connection",key="rn_retry_official_feeds"):
@@ -159,18 +156,14 @@ def render_reported_news(s):
                 "Databricks Apps egress approval for the official ECB RSS hosts. "
                 "Do not disable TLS verification or upload credentials."
             )
-    by_status={}
-    if fresh:
-        # One bounded AI Gateway request for top official headlines.
-        with st.spinner("Classifying official news with the ABN AI Gateway…"):
-            try:
-                scored=load_real_news_ai_classification(fresh[:8])
-                by_status={v["id"]:v for v in scored}
-            except Exception:
-                st.warning(
-                    "News classification is unavailable. Official headlines "
-                    "remain accessible; no AI-derived labels are assumed."
-                )
+    with st.spinner("Ranking official news with the existing AI Gateway…"):
+        by_status,ai_error=official_article_classifications(fresh)
+    if ai_error:
+        st.warning(
+            "The AI Gateway could not classify the locally available articles. "
+            "Official news remains visible, but relevance and confidence "
+            "are not assessed."
+        )
     for warning in warnings:
         st.caption("Source status: "+warning)
 
@@ -207,7 +200,10 @@ def render_reported_news(s):
         if not fresh:
             st.info("No official ECB headlines are currently available. Nothing synthetic is shown.")
         for article in fresh[:10]:
-            render_html(_card(article,by_status.get(article["id"],{})))
+            render_html('<div class="rb-news-grid">'+_card(
+                article,by_status.get(article["id"],{}),
+                saved=status["mode"]=="snapshot",
+            )+'</div>')
             if rate_events is not None:
                 reviewed=verified_rate_scenario(
                     article,rate_events,
