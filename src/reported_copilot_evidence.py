@@ -123,5 +123,5 @@ def build_reported_evidence(s, topic):
         "source": source,
         "metrics": metrics,
         "notes": notes,
-        "llm_enabled": False,
+        "llm_enabled": topic == "Capital" and not scope,
     }
