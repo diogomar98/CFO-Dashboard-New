@@ -379,10 +379,10 @@ def open_window(module):
 
         if is_real:
             render_reported_module(module, s)
-            if module != "copilot":
-                # Real Data-only: the balloon lives in the active report.
-                from src.reported_copilot_balloon import render_floating_copilot
-                render_floating_copilot(s)
+            # Jarvis is a separate always-available assistant, including
+            # alongside the central Ask CFO Copilot report.
+            from src.reported_copilot_balloon import render_floating_copilot
+            render_floating_copilot(s)
         else:
             RENDERERS[module](s)
 
