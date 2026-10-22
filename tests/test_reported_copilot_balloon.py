@@ -103,7 +103,7 @@ class FloatingCopilotTests(unittest.TestCase):
         self.assertIn('st.button("✕"',view)
         self.assertIn('"jarvis_open"',view)
         self.assertIn('jarvis-history-marker',view)
-        self.assertIn('max-height:calc(min(700px,100dvh - 42px) - 235px)',view)
+        self.assertIn('max-height:calc(min(700px,100dvh - 42px) - 300px)',view)
         self.assertIn('with st.form("jarvis_composer_form"',view)
         self.assertIn('with st.chat_message(message["role"])',view)
         self.assertNotIn('_quarter_comparison_chart',view)
