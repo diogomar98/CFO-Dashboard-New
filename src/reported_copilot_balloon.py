@@ -342,7 +342,19 @@ def _show_answer_visual(evidence,history):
         return
     with st.expander("Show financial evidence",expanded=False):
         if name in ("cet1_ratio_pct","rwa_m") and evidence["scope"]=="ABN AMRO Group":
-            render_cet1_visuals(build_cet1_bridge(evidence),compact=True)
+            # Do not nest st.expander inside st.expander; older ABN Streamlit
+            # raises an exception when expandable visual blocks are nested.
+            bridge=build_cet1_bridge(evidence)
+            st.caption(
+                f"Q1 CET1 {bridge['previous_ratio_pct']:.2f}% → "
+                f"Q2 CET1 {bridge['latest_ratio_pct']:.2f}%; "
+                f"change {bridge['reported_delta_pp']:+.3f} pp."
+            )
+            st.altair_chart(_capital_bridge_chart(bridge),use_container_width=True)
+            st.caption(
+                "Reported Group CET1 capital and RWA arithmetic. "
+                "Not an explanation of the underlying business causes."
+            )
             return
         history_rows=evidence.get("quarterly_history",[])
         if name in ("nii_m","nim_bps") and evidence.get("group_nii_nim_history_2021"):
