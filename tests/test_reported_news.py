@@ -225,7 +225,8 @@ class ReportedNewsTests(unittest.TestCase):
         self.assertIn("news is unavailable",code.lower())
         self.assertIn("recent_official_articles(include_status=True)",brief)
         self.assertIn("Saved official ECB headlines",brief)
-        self.assertIn("Why it matters",brief)
+        self.assertIn("AI relevance",brief)
+        self.assertIn("Official excerpt",brief)
         self.assertIn("rb-news-grid",brief)
         self.assertNotIn("load_existing_news()",brief[brief.index("def _external_news()"):])
 
