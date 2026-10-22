@@ -350,6 +350,14 @@ def _primary_cards(s, data):
             ):
                 st.session_state["rb_focus"] = metric
                 st.session_state["rb_expanded"] = True
+            if not s.business_line and metric == "cet1_ratio_pct":
+                if st.button(
+                    "Ask Copilot about CET1 ↗",
+                    key="rb_ask_cet1_copilot",use_container_width=True,
+                ):
+                    from src.reported_copilot_balloon import prepare_cet1_investigation
+                    prepare_cet1_investigation()
+                    st.caption("CET1 question prepared in the floating Copilot.")
 
 
 def _details(frame, key, unit, name, s):
