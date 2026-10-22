@@ -1,0 +1,210 @@
+"""Real Data News Intelligence: official-source scan → AI triage → reviewed ECB shock.
+
+The Synthetic News module and fixture-scanning agent remain untouched.
+"""
+import html
+from datetime import datetime, timezone
+
+import streamlit as st
+
+from src.hud import navigate_to_module, render_html
+from src.public_horizon_engine import load_public_horizon_inputs
+from src.public_scenario_engine import NEUTRAL_INPUTS
+from src.reported_news_partner import (
+    DFR_URL, OFFICIAL_FEEDS, classify_headlines, fetch_ecb_articles,
+    fetch_ecb_rate_events, verified_rate_scenario,
+)
+
+
+@st.cache_data(ttl=1800,show_spinner=False)
+def load_real_public_news():
+    return fetch_ecb_articles()
+
+
+@st.cache_data(ttl=3600,show_spinner=False)
+def load_real_news_ai_classification(article_batch):
+    return classify_headlines(article_batch)
+
+
+@st.cache_data(ttl=3600,show_spinner=False)
+def load_verified_ecb_rate_events():
+    return fetch_ecb_rate_events()
+
+
+def recent_official_articles():
+    """Read-only source-backed feed for News and Morning Brief."""
+    records, warnings = load_real_public_news()
+    return records, warnings
+
+
+def current_verified_ecb_change(reporting_frame, *, events=None, now=None):
+    """The net *observed* ECB DFR move since model's Q2 2026 cutoff."""
+    current=now or datetime.now(timezone.utc).date()
+    dfr_close=float(reporting_frame.iloc[-1]["dfr_qend_pct"])
+    rate_events=events if events is not None else load_verified_ecb_rate_events()
+    valid=[(day,rate) for day,rate in rate_events
+           if day<=current]
+    if not valid:
+        return None
+    date_effect,observed=valid[-1]
+    if date_effect<=datetime(2026,6,30).date():
+        return None
+    movement=(observed-dfr_close)*100
+    rounded=round(movement)
+    if abs(movement-rounded)>.05 or not -100<=rounded<=100 or not rounded:
+        return None
+    return {
+        "rate_shock_bps":int(rounded),
+        "rate_effective_date":date_effect.isoformat(),
+        "latest_ecb_dfr_pct":observed,
+        "q2_2026_dfr_pct":dfr_close,
+        "official_data_url":DFR_URL,
+        "status":"Official ECB rate observations; historic update since forecast cutoff",
+    }
+
+
+def _queue_rate_scenario(evidence):
+    """No actual model run until CFO reviews choices in the What-If form."""
+    shock=int(evidence["rate_shock_bps"])
+    if not -100<=shock<=100:
+        raise ValueError("ECB rate difference exceeds the reviewed shock range.")
+    st.session_state["rs_public_options"]={
+        **NEUTRAL_INPUTS,"method":"rate_arx","rate_shock_bps":float(shock),
+    }
+    st.session_state["rs_news_source"]={
+        "rate_shock_bps":shock,
+        "rate_effective_date":evidence["rate_effective_date"],
+        "official_data_url":evidence["official_data_url"],
+        "status":evidence["status"],
+    }
+    navigate_to_module("scenario")
+
+
+def _card(article,classification):
+    """Reuses cockpit feed tone; all external text and URLs escaped."""
+    title=html.escape(article["headline"])
+    source=html.escape(article["source"])
+    day=html.escape(article["published"][:10])
+    excerpt=html.escape(article["summary"][:240])
+    rank=classification.get("relevance","UNRATED")
+    if rank not in {"HIGH","MEDIUM","LOW"}:
+        rank="UNRATED"
+    context=html.escape(classification.get("reason","Not yet classified."))
+    metric=html.escape(classification.get("metric","Not evaluated"))
+    url=html.escape(article["url"],quote=True)
+    return (
+        '<article class="feed-item rb-news-item">'
+        '<div class="feed-item-top">'
+        f'<span class="feed-tag">OFFICIAL ECB</span><span class="feed-date">{day}</span>'
+        f'<span class="feed-status status-impact-{rank.lower()}">{rank.title()}</span>'
+        '</div>'
+        f'<div class="feed-headline">{title}</div>'
+        f'<div class="feed-detail">{excerpt}</div>'
+        f'<div class="feed-detail"><strong>AI watch</strong> {metric}: {context}</div>'
+        '<div class="feed-foot">'
+        '<span class="feed-source">Potential relevance only · not a bank impact estimate</span>'
+        f'<a class="news-source-link" href="{url}" target="_blank" rel="noopener noreferrer">'
+        f'{source} ↗</a></div></article>'
+    )
+
+
+def render_reported_news(s):
+    st.markdown("### News Intelligence · verified public sources")
+    st.caption(
+        "Official ECB press and statistical RSS feeds, periodically refreshed "
+        "while the dashboard is used. The existing AI Gateway triages the "
+        "public headlines. It never calculates or invents a bank stress amount."
+    )
+    report=load_public_horizon_inputs(s.reported_group)
+    fresh,warnings=recent_official_articles()
+    by_status={}
+    if fresh:
+        # One bounded AI Gateway request for top official headlines.
+        with st.spinner("Classifying official news with the ABN AI Gateway…"):
+            try:
+                scored=load_real_news_ai_classification(fresh[:8])
+                by_status={v["id"]:v for v in scored}
+            except Exception:
+                st.warning(
+                    "News classification is unavailable. Official headlines "
+                    "remain accessible; no AI-derived labels are assumed."
+                )
+    for warning in warnings:
+        st.caption("Source status: "+warning)
+
+    actionable_count=sum(
+        1 for article in fresh
+        if by_status.get(article["id"],{}).get("relevance")=="HIGH"
+    )
+    c1,c2,c3=st.columns(3)
+    c1.metric("Official announcements",str(len(fresh)))
+    c2.metric("AI high relevance",str(actionable_count) if by_status else "Unavailable")
+    c3.metric("Rate-stress support","ECB DFR only")
+    st.caption(
+        "Sources: "+", ".join(x[0] for x in OFFICIAL_FEEDS)
+        +". Feed summaries are not the same as complete articles. "
+        "No user or bank-specific financial data are transmitted to the news classifier."
+    )
+    feed_col,scenario_col=st.columns([1.4,1],gap="large")
+    with feed_col:
+        st.markdown("#### Recent developments")
+        if not fresh:
+            st.info("No verified public headlines could be retrieved; there is no synthetic fallback.")
+        for article in fresh[:10]:
+            render_html(_card(article,by_status.get(article["id"],{})))
+
+    with scenario_col:
+        st.markdown("#### From public news to What-If")
+        st.caption(
+            "The only supported Real Data news lever is the ECB deposit "
+            "facility rate. Other AI-detected topics remain watchlist items "
+            "until a validated financial scenario model exists."
+        )
+        try:
+            official_change=current_verified_ecb_change(report)
+        except Exception:
+            official_change=None
+            st.warning(
+                "Official ECB rate verification is unavailable. "
+                "No rate scenario can be prepared."
+            )
+        if official_change is None:
+            st.info(
+                "No new, independently verified ECB rate change within "
+                "the model's ±100 bps scenario range was found after Q2 2026."
+            )
+        else:
+            change=official_change["rate_shock_bps"]
+            st.metric("Observed DFR change vs Q2 2026",f"{change:+d} bps")
+            st.write(
+                f"Q2 2026: **{official_change['q2_2026_dfr_pct']:.2f}%** → "
+                f"latest verified: **{official_change['latest_ecb_dfr_pct']:.2f}%**"
+            )
+            st.caption(
+                "ECB rate effective from "
+                +official_change["rate_effective_date"]
+                +". This is a historical rate update to the Q2-cutoff "
+                "model—not a forecast, and not proof of ABN NII/NIM impact."
+            )
+            st.markdown(
+                "[Inspect official ECB rate observations]("
+                +official_change["official_data_url"]+")"
+            )
+            if st.button(
+                f"Review {change:+d} bps scenario in What-If →",
+                use_container_width=True,key="rn_news_to_whatif"
+            ):
+                _queue_rate_scenario(official_change)
+        st.divider()
+        st.markdown("#### What AI is doing")
+        st.write(
+            "1. Monitor a fixed set of official feeds.\n"
+            "2. Classify relevance using public headlines and excerpts.\n"
+            "3. Independently check rate observations against the ECB API.\n"
+            "4. Prepare, but never silently execute, a scenario."
+        )
+        st.caption(
+            "The app refreshes its feeds while in use (30-minute cache). "
+            "Continuous unattended monitoring needs a separate approved "
+            "Databricks Job; this release does not claim to run in the background."
+        )
