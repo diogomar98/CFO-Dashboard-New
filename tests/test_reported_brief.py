@@ -86,15 +86,15 @@ class ReportedBriefTests(unittest.TestCase):
         state = build_reported_state("Wealth Management")
         self.assertEqual(len(_key_insights(state)), 3)
 
-    def test_news_reuses_existing_source_but_labels_prototype_status(self):
+    def test_real_morning_uses_official_feeds_with_original_news_card_style(self):
         code = Path("src/reported_brief.py").read_text(encoding="utf-8")
-        self.assertIn("load_news_signals()", code)
-        self.assertIn("load_news_geo_impact()", code)
-        self.assertNotIn("load_articles()", code)
-        self.assertIn("prototype feed", code.lower())
-        self.assertIn("is-external rb-news-wide", code)
-        self.assertIn("rb-news-grid", code)
-        self.assertIn("src.reported_brief", Path("src/real_data_mode.py").read_text(encoding="utf-8"))
+        self.assertIn("from src.reported_news import recent_official_articles",code)
+        self.assertIn("Official ECB RSS",code)
+        self.assertIn("is-external rb-news-wide",code)
+        self.assertIn("rb-news-grid",code)
+        self.assertIn("No synthetic news records have been substituted",code)
+        self.assertIn("src.reported_brief",
+                      Path("src/real_data_mode.py").read_text(encoding="utf-8"))
 
     def test_news_deduplication_ranking_from_existing_sources(self):
         from unittest.mock import patch
