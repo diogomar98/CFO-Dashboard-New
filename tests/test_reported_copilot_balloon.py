@@ -68,7 +68,7 @@ class FloatingCopilotTests(unittest.TestCase):
         spec=_capital_bridge_chart(self.bridge).to_dict()
         # Altair layers may move a Pandas frame into top-level "datasets".
         first=spec["layer"][0]
-        data=first["data"]
+        data=first.get("data",spec.get("data",{}))
         rows=data.get("values")
         if rows is None:
             rows=spec["datasets"][data["name"]]
