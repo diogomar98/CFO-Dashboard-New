@@ -62,72 +62,9 @@ def _render_capital_arithmetic(evidence):
 
 
 def _live_cet1_thread(evidence):
-    """Use separate Real-mode state and existing openai_partner gateway."""
-    st.markdown("#### Ask the CFO Copilot · CET1")
-    st.caption(
-        "Real-data AI Gateway call using the existing openai_partner.py connection. "
-        "Answers are model-generated; source values and the arithmetic bridge "
-        "above are verified locally. Genie is not used for this investigation."
-    )
-    key="real_cfo_cet1_messages"
-    st.session_state.setdefault(key,[])
-    history=st.session_state[key]
-    controls=st.columns([2.3,1.0],gap="small")
-    with controls[0]:
-        investigate=st.button(
-            "Investigate Q2 2026 CET1 movement",
-            key="real_cet1_investigate",
-            use_container_width=True,
-            type="primary",
-        )
-    with controls[1]:
-        if st.button("Clear conversation",key="real_cet1_clear",use_container_width=True):
-            st.session_state[key]=[]
-            history=st.session_state[key]
-    for item in history[-12:]:
-        with st.chat_message(item["role"]):
-            st.markdown(item["content"])
-            if item.get("role")=="assistant":
-                st.caption(
-                    "AI-generated interpretation · factsheet-sourced figures · "
-                    "not an approved causal assessment"
-                )
-    question=DEFAULT_QUESTION if investigate else st.chat_input(
-        "Ask a standalone question about Group CET1 or RWA…",
-        key="real_cet1_chat",
-        max_chars=800,
-    )
-    if not question or not question.strip():
-        return
-    question=question.strip()
-    if len(question)>800:
-        st.warning("Keep the CET1 question within 800 characters.")
-        return
-    history.append({"role":"user","content":question})
-    with st.chat_message("user"):
-        st.markdown(question)
-    with st.chat_message("assistant"):
-        with st.spinner("Investigating sourced Group CET1 figures using the ABN AI Gateway…"):
-            try:
-                result=answer_reported_cet1(question,evidence)
-            except Exception as exc:
-                # Never print raw HTTP errors or token-bearing request details.
-                st.error(
-                    "The AI Gateway did not return an answer. Check that the "
-                    "existing openai_partner.py connection is configured in the "
-                    "ABN environment; no synthetic fallback was used."
-                )
-                st.caption(f"Failure category: {type(exc).__name__}")
-                return
-        st.markdown(result["answer"])
-        st.caption(
-            "Model-generated interpretation; validate all claims with official "
-            "disclosures. Source: ABN AMRO Q2 2026 factsheet, Group CET1 and RWA."
-        )
-        history.append({
-            "role":"assistant","content":result["answer"],
-            "source":result["source"],
-        })
+    """The standalone route uses the exact same multi-turn thread as the balloon."""
+    from src.reported_copilot_balloon import render_cet1_chat
+    render_cet1_chat(evidence, compact=False)
 
 
 def render_reported_copilot(s):
@@ -159,11 +96,10 @@ def render_reported_copilot(s):
     live = bool(evidence["llm_enabled"])
     if live:
         try:
-            _render_capital_arithmetic(evidence)
+            _live_cet1_thread(evidence)
         except ValueError as exc:
             st.error(f"Cannot reconcile CET1: {exc}")
             return
-        _live_cet1_thread(evidence)
     else:
         st.info(
             "AI interpretation is enabled only for reported Group CET1 in this "
