@@ -157,7 +157,7 @@ def _lens(path,summary):
     """Preserve the Synthetic forward-lens layout with accountable methodology."""
     diag=summary["diagnostics"]
     nim=diag["nim_bps"];nii=diag["nii_m"]
-    method_labels={"no_change":"No-change historical benchmark",
+    method_labels={"no_change":"Flat financial baseline (ECB-insensitive)",
                    "rate_arx":"Rate-sensitive ARX (ridge regularised)"}
     start=path[path["series"]=="Baseline"].iloc[0]["quarter"]
     final=path[path["series"]=="Baseline"].iloc[-1]["quarter"]
