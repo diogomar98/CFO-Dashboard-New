@@ -379,6 +379,10 @@ def open_window(module):
 
         if is_real:
             render_reported_module(module, s)
+            if module != "copilot":
+                # Real Data-only: the balloon lives in the active report.
+                from src.reported_copilot_balloon import render_floating_copilot
+                render_floating_copilot(s)
         else:
             RENDERERS[module](s)
 
@@ -387,6 +391,10 @@ def open_window(module):
 
 if selected_module != "home":
     open_window(selected_module)
+elif is_real:
+    # Home has no modal; mount the same Copilot directly on the main report.
+    from src.reported_copilot_balloon import render_floating_copilot
+    render_floating_copilot(s)
 
 
 # ============================================================
