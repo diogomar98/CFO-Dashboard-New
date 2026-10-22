@@ -11,6 +11,7 @@ from src.reported_copilot_partner import (
 )
 from src.reported_copilot_balloon import (
     _capital_bridge_chart, _quarter_comparison_chart, MAX_STORED_MESSAGES,
+    prepare_cet1_investigation, _popover_options,
 )
 
 
@@ -117,6 +118,22 @@ class FloatingCopilotTests(unittest.TestCase):
         view=Path("src/reported_copilot_balloon.py").read_text(encoding="utf-8")
         self.assertIn("if s.business_line:",view)
         self.assertIn("Group CET1 investigation only",view)
+
+    def test_brief_can_prepare_contextual_cet1_followup(self):
+        from src.reported_copilot_partner import DEFAULT_QUESTION
+        with patch("src.reported_copilot_balloon.st.session_state",{}) as state:
+            prepare_cet1_investigation()
+            self.assertEqual(state["real_cfo_question_compact"],DEFAULT_QUESTION)
+            self.assertTrue(state["real_cfo_popover_open"])
+        opts=_popover_options()
+        self.assertIn("use_container_width",opts)
+        # On compatible Streamlit builds, key/on_change allow auto-opening.
+        if "key" in opts:
+            self.assertEqual(opts["key"],"real_cfo_popover_open")
+        brief=Path("src/reported_brief.py").read_text(encoding="utf-8")
+        self.assertIn("Ask Copilot about CET1",brief)
+        self.assertIn('metric == "cet1_ratio_pct"',brief)
+        self.assertIn("prepare_cet1_investigation()",brief)
 
     def test_no_sensitive_code_or_source_csv_changes(self):
         self.assertTrue(Path("src/openai_partner.py").exists())
