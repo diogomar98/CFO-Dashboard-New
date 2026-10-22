@@ -405,9 +405,10 @@ def render_reported_module(module, s):
         return
 
     if module == "copilot":
-        st.markdown("#### CFO Copilot | evidence controls")
-        st.warning("Real-data Copilot is not yet connected. It will not query the prototype's synthetic views or use synthetic context when Real Data mode is selected.")
-        st.dataframe(group.tail(4).sort_values("date", ascending=False), hide_index=True, use_container_width=True)
+        # Phase 1: read-only source-grounded evidence. NEVER invoke the
+        # Synthetic Copilot, its Genie agent or its legacy AI client.
+        from src.reported_copilot import render_reported_copilot
+        render_reported_copilot(s)
         return
 
     st.markdown(f"#### {module.title()} | pending data integration")
