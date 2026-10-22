@@ -8,7 +8,7 @@ import html
 import pandas as pd
 import streamlit as st
 
-from src.hud import render_html
+from src.hud import render_html, module_url
 from src.kpi_sparklines import sparkline_html
 from src.real_data_mode import _quarter
 from src.extended_data_loader import load_news_signals, load_news_geo_impact
@@ -555,59 +555,94 @@ def _prototype_article(article):
 
 
 def _external_news():
-    """Use official public ECB sources, preserving the original wide news layout.
+    """Restore the original visually rich news feed using only real ECB items.
 
-    Source excerpts have not been checked for bank-specific economic impact.
-    News relevance is separately evaluated on the News Intelligence page.
+    Live ECB RSS when reachable; otherwise a clearly timestamped, independently
+    verified ECB RSS snapshot. Never use Synthetic news fixtures in Real mode.
     """
     from src.reported_news import recent_official_articles
     st.markdown("### External news & developments")
-    articles, warnings = recent_official_articles()
+    articles,warnings,status=recent_official_articles(include_status=True)
+    is_snapshot=status["mode"]=="snapshot"
     cards=[]
     for article in articles[:4]:
         headline=html.escape(article["headline"])
-        summary=html.escape(article["summary"][:190])
+        summary=html.escape(article["summary"][:235])
         source=html.escape(article["source"])
         day=html.escape(article["published"][:10])
         url=html.escape(article["url"],quote=True)
+        terms=set(article.get("relevant_terms",[]))
+        # Keyword/topic watch is NOT an AI impact classification or model output.
+        if terms.intersection({"monetary policy","deposit facility","interest rate"}):
+            topic="Policy rates · NIM/NII watch"
+        elif terms.intersection({"liquidity","funding"}):
+            topic="Liquidity / funding watch"
+        elif "credit" in terms:
+            topic="Credit conditions watch"
+        elif terms.intersection({"capital","banking supervision"}):
+            topic="Capital / supervision watch"
+        else:
+            topic="Macro / policy watch"
+        badges=(
+            '<span class="feed-status status-impact-low">Saved ECB</span>'
+            if is_snapshot else
+            '<span class="feed-status status-impact-low">Live source</span>'
+        )
         cards.append(
             '<article class="feed-item rb-news-item">'
             '<div class="feed-item-top">'
             '<span class="feed-tag">ECB / public</span>'
-            f'<span class="feed-date">{day}</span>'
-            '<span class="feed-status status-impact-low">Unrated</span>'
+            f'<span class="feed-date">{day}</span>'+badges+
             '</div>'
             f'<div class="feed-headline">{headline}</div>'
-            f'<div class="feed-detail">{summary}</div>'
+            '<div class="feed-detail"><strong>Why it matters</strong> '
+            f'{summary or "Official ECB announcement; inspect the original release."}</div>'
             '<div class="feed-detail"><strong>Potential metric</strong> '
-            'See News Intelligence for AI relevance classification</div>'
+            f'{html.escape(topic)} (keyword watch; impact unverified)</div>'
+            '<div class="feed-detail"><strong>Next</strong> '
+            'Review the announcement and any independently verified '
+            'scenario assumptions in News Intelligence.</div>'
             '<div class="feed-foot">'
-            '<span class="feed-source">Official public news · unverified bank impact</span>'
+            '<span class="feed-source">Official public source · no causal claim</span>'
             f'<a class="news-source-link" href="{url}" target="_blank" '
             f'rel="noopener noreferrer">{source} ↗</a>'
             '</div></article>'
         )
     if cards:
         content='<div class="rb-news-grid">'+"".join(cards)+'</div>'
-        last_update=html.escape(articles[0]["published"][:10])
+        last_update=html.escape(
+            status.get("retrieved_at_utc","")[:16].replace("T"," ")+" UTC"
+            if is_snapshot else "Live ECB RSS"
+        )
     else:
         content=(
-            '<div class="feed-empty">Official ECB feeds unavailable. '
-            'No synthetic news records have been substituted. '
-            +html.escape("; ".join(warnings[:2]))+'</div>'
+            '<div class="feed-empty">No approved ECB news is available. '
+            'Check News Intelligence for connection diagnostics. '
+            'No synthetic items have been inserted.</div>'
         )
-        last_update="Official source unavailable"
+        last_update="Source unavailable"
+    note=(
+        "Saved official ECB headlines collected on "
+        +html.escape(status["retrieved_at_utc"][:16].replace("T"," "))
+        +" UTC. Live ECB access failed in this workspace; articles may be "
+        "out of date. These are not Synthetic fixtures or verified bank impacts."
+        if is_snapshot else
+        "Official ECB RSS headlines. Topic watches are transparent keyword "
+        "tags—not AI model classifications or verified ABN impacts."
+    )
     render_html(
         '<section class="feed-frame is-external rb-news-wide">'
         '<div class="feed-frame-head">'
         '<span class="feed-frame-title">External news</span>'
-        f'<span class="feed-frame-note">Official ECB RSS · {last_update}</span>'
+        f'<span class="feed-frame-note">{last_update}</span>'
         '</div>'
+        f'<div class="rb-news-clarifier">{note}</div>'
+        +content+
         '<div class="rb-news-clarifier">'
-        'Headlines are live public information and are not evidence of '
-        'causal impact on ABN financials. See News Intelligence for AI '
-        'relevance and an independently verified ECB-rate scenario.'
-        '</div>'+content+'</section>'
+        f'<a class="news-source-link" href="{html.escape(module_url("news"),quote=True)}" '
+        'target="_self">Open News Intelligence →</a>'
+        '</div>'
+        '</section>'
     )
 
 
