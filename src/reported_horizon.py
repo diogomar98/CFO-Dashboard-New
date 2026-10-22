@@ -310,14 +310,11 @@ def render_reported_horizon(s):
          f"€{model['fy_nii_m']/1000:.2f}bn",
          f"€{model['fy_nii_actual_m']/1000:.2f}bn actual + "
          f"€{model['fy_nii_projected_m']/1000:.2f}bn projected"),
-        ("Next-quarter NIM step",
-         f"{model['first_nim_change_bps']:+.1f} bps",
-         f"Modelled vs reported {model['last_quarter']}"),
         ("ECB DFR · Q2 actual",
          f"{model['last_ecb_qend_pct']:.2f}%",
          "Neutral forward-rate assumption: unchanged"),
     ]
-    for col,(label,value,detail) in zip(st.columns(4),cards):
+    for col,(label,value,detail) in zip(st.columns(3),cards):
         with col:
             render_html(_card(label,value,detail))
     st.caption(
