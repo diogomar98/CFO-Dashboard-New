@@ -201,7 +201,7 @@ def _impact_narrative(options,impacts,quarterly):
             "Neutral assumptions selected: scenario and matched baseline "
             "are identical, so both forecast lines overlap."
         )
-    if all(abs(float(quarterly[c]).max())<1e-10 for c in (
+    if all(float(quarterly[c].abs().max())<1e-10 for c in (
         "delta_nim_bps","delta_nii_m"
     )):
         msgs.append(
