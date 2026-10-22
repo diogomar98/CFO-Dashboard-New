@@ -142,7 +142,7 @@ class ReportedHorizonTests(unittest.TestCase):
         self.assertIn("font-weight:800;color:#E7FFE9", source)
         self.assertIn("rh-metric::before", source)
         self.assertIn("Forward trajectory / actual",source)
-        self.assertIn("ECB deposit facility rate",source)
+        self.assertIn("ECB DFR · Q2 actual",source)
         self.assertIn("from src.reported_horizon import render_reported_horizon",
                       Path("src/real_data_mode.py").read_text(encoding="utf-8"))
         synthetic=Path("src/modules/horizon.py").read_text(encoding="utf-8")
