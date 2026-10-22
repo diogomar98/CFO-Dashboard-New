@@ -1,8 +1,8 @@
-"""Embedded Real Data Copilot balloon, chat turns and verified visual evidence.
+"""Jarvis: separate Real Data floating chat; central Ask CFO Copilot unchanged.
 
-A native Streamlit popover stays inside the active report dialog or home.
-It never sends chart instructions to the LLM: all diagrams are computed from
-the same two published Group capital/RWA reporting quarters.
+Uses native older-Streamlit-compatible widgets and scoped fixed-position CSS,
+with a distinct scrolling message body and an ordinary composer footer.
+All CET1 evidence charts are derived locally from verified quarterly actuals.
 """
 import inspect
 
@@ -44,6 +44,9 @@ div[data-testid="stVerticalBlock"]:has(.jarvis-root-marker):not(
     height:min(700px,calc(100dvh - 42px)) !important;
     max-height:calc(100dvh - 42px) !important;
     overflow:hidden !important;
+    display:flex !important;
+    flex-direction:column !important;
+    gap:7px !important;
 }
 div[data-testid="stVerticalBlock"]:has(.jarvis-root-marker):not(
   :has(div[data-testid="stVerticalBlock"] .jarvis-root-marker)
@@ -70,6 +73,16 @@ div[data-testid="stVerticalBlock"]:has(.jarvis-closed-marker):not(
     min-height:49px !important;
     padding:0 17px !important;
 }
+/* Streamlit builds differ in whether a container introduces a border
+   wrapper. Constrain either wrapper so it cannot push the composer offscreen. */
+div[data-testid="stVerticalBlockBorderWrapper"]:has(.jarvis-history-marker):not(
+  :has(div[data-testid="stVerticalBlockBorderWrapper"] .jarvis-history-marker)
+) {
+    max-height:calc(min(700px,100dvh - 42px) - 300px) !important;
+    min-height:0 !important;
+    overflow-y:auto !important;
+    flex:1 1 auto !important;
+}
 .jarvis-root-marker,.jarvis-open-marker,.jarvis-closed-marker,
 .jarvis-history-marker {display:none;}
 .jarvis-heading {font-weight:850;font-size:1.05rem;color:#E3FFEA;}
@@ -80,7 +93,7 @@ div[data-testid="stVerticalBlock"]:has(.jarvis-history-marker):not(
     overflow-y:auto !important;
     overscroll-behavior:contain;
     min-height:150px !important;
-    max-height:calc(min(700px,100dvh - 42px) - 235px) !important;
+    max-height:calc(min(700px,100dvh - 42px) - 300px) !important;
     padding:8px !important;
     background:rgba(2,10,6,.65) !important;
     border:1px solid rgba(76,145,92,.29) !important;
