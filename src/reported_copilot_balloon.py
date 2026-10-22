@@ -19,48 +19,104 @@ from src.reported_copilot_partner import (
 
 BALLOON_CSS = """
 <style>
-/* Deliberately scoped: no visual or behavioural change in Synthetic mode. */
-/* ABN runs a Streamlit version without keyed containers. The
-   balloon is the only native popover in the Real Data view, so style its
-   native wrapper directly instead of depending on keyed containers. */
-div[data-testid="stPopover"] {
+/* Jarvis is a SEPARATE Real Data assistant. The radial CFO Copilot is intact.
+   Target only the innermost Streamlit block containing the Jarvis marker.
+   This does not require st.container(key=...), a feature unavailable at ABN. */
+div[data-testid="stVerticalBlock"]:has(.jarvis-root-marker):not(
+  :has(div[data-testid="stVerticalBlock"] .jarvis-root-marker)
+) {
     position:fixed !important;
-    bottom:22px !important;
+    bottom:20px !important;
     right:24px !important;
-    width:max-content !important;
-    max-width:calc(100vw - 30px);
     z-index:1000000 !important;
+    width:min(470px,calc(100vw - 24px)) !important;
+    max-width:min(470px,calc(100vw - 24px)) !important;
+    background:linear-gradient(160deg,#102118,#07120C) !important;
+    border:1px solid rgba(72,187,111,.63) !important;
+    border-radius:14px !important;
+    padding:14px !important;
+    box-shadow:0 20px 55px rgba(0,0,0,.74),0 0 18px rgba(41,167,88,.12);
+    box-sizing:border-box !important;
 }
-div[data-testid="stPopover"] > button,
-div[data-testid="stPopover"] button {
-    background:linear-gradient(110deg,#0C2716,#173A25) !important;
-    border:1px solid #45C878 !important;
-    box-shadow:0 8px 34px rgba(0,0,0,.52),0 0 14px rgba(45,190,96,.17);
-    border-radius:100px !important;
-    color:#E7FBEA !important;
-    font-size:.86rem !important;
-    font-weight:750;
-    padding:.48rem 1.1rem;
-    min-height:42px;
+div[data-testid="stVerticalBlock"]:has(.jarvis-root-marker):not(
+  :has(div[data-testid="stVerticalBlock"] .jarvis-root-marker)
+):has(.jarvis-open-marker) {
+    height:min(700px,calc(100dvh - 42px)) !important;
+    max-height:calc(100dvh - 42px) !important;
+    overflow:hidden !important;
 }
-div[data-testid="stPopoverBody"]:has(.real-cfo-panel-header) {
-    width:min(500px, calc(100vw - 24px)) !important;
-    max-height:min(78vh,850px) !important;
+div[data-testid="stVerticalBlock"]:has(.jarvis-root-marker):not(
+  :has(div[data-testid="stVerticalBlock"] .jarvis-root-marker)
+):has(.jarvis-closed-marker) {
+    width:max-content !important;
+    min-width:116px;
+    height:auto !important;
+    border-radius:38px !important;
+    padding:4px !important;
+    background:transparent !important;
+    border:0 !important;
+    box-shadow:none !important;
+}
+div[data-testid="stVerticalBlock"]:has(.jarvis-closed-marker):not(
+  :has(div[data-testid="stVerticalBlock"] .jarvis-closed-marker)
+) button {
+    border-radius:40px !important;
+    background:linear-gradient(115deg,#14502D,#0B2518) !important;
+    color:#E5FFEA !important;
+    border:1px solid #4DDD86 !important;
+    font-size:.84rem !important;
+    font-weight:800 !important;
+    box-shadow:0 9px 34px rgba(0,0,0,.62),0 0 15px rgba(26,172,79,.23);
+    min-height:49px !important;
+    padding:0 17px !important;
+}
+.jarvis-root-marker,.jarvis-open-marker,.jarvis-closed-marker,
+.jarvis-history-marker {display:none;}
+.jarvis-heading {font-weight:850;font-size:1.05rem;color:#E3FFEA;}
+.jarvis-subtitle {font-size:.67rem;color:#A9CCB2;margin-top:.1rem;}
+div[data-testid="stVerticalBlock"]:has(.jarvis-history-marker):not(
+  :has(div[data-testid="stVerticalBlock"] .jarvis-history-marker)
+) {
     overflow-y:auto !important;
-    background:#0C1710 !important;
-    color:#D8ECE0 !important;
-    border:1px solid rgba(80,184,111,.55);
-    border-radius:10px !important;
-    box-shadow:0 16px 50px rgba(0,0,0,.65);
+    overscroll-behavior:contain;
+    min-height:150px !important;
+    max-height:calc(min(700px,100dvh - 42px) - 235px) !important;
+    padding:8px !important;
+    background:rgba(2,10,6,.65) !important;
+    border:1px solid rgba(76,145,92,.29) !important;
+    border-radius:8px !important;
 }
-.real-cfo-panel-header {padding:.1rem 0 .5rem;}
-.real-cfo-panel-title {font-size:1.0rem;font-weight:800;color:#D7FFE0;letter-spacing:.025em;}
-.real-cfo-panel-sub {font-size:.67rem;color:#A6CAB1;line-height:1.45;}
-.real-cfo-visual-head {font-size:.71rem;font-weight:800;color:#B9DDC1;letter-spacing:.03em;}
-@media(max-width:650px){
-  div[data-testid="stPopover"] {right:12px !important;bottom:12px !important;}
-  div[data-testid="stPopoverBody"]:has(.real-cfo-panel-header) {
-    width:calc(100vw - 24px) !important; max-height:75vh !important;
+div[data-testid="stVerticalBlock"]:has(.jarvis-history-marker):not(
+  :has(div[data-testid="stVerticalBlock"] .jarvis-history-marker)
+) [data-testid="stChatMessage"] {
+    padding:.75rem !important;
+    margin-bottom:.5rem !important;
+    border:1px solid rgba(74,118,82,.2);
+    border-radius:8px;
+}
+div[data-testid="stVerticalBlock"]:has(.jarvis-root-marker):not(
+  :has(div[data-testid="stVerticalBlock"] .jarvis-root-marker)
+) textarea {
+    min-height:66px !important;
+    background:#101C19 !important;
+}
+div[data-testid="stVerticalBlock"]:has(.jarvis-root-marker):not(
+  :has(div[data-testid="stVerticalBlock"] .jarvis-root-marker)
+) [data-testid="stForm"] {
+    background:rgba(11,32,20,.96);
+    padding:.45rem .55rem !important;
+    border-top:1px solid rgba(86,159,109,.35);
+    border-radius:7px;
+}
+/* Streamlit dialogs can create an opaque backdrop; Jarvis lives inside
+   the active Real Data dialog and is therefore interactive above it. */
+@media (max-width:650px) {
+  div[data-testid="stVerticalBlock"]:has(.jarvis-root-marker):not(
+    :has(div[data-testid="stVerticalBlock"] .jarvis-root-marker)
+  ) {
+    bottom:10px !important;right:10px !important;
+    width:calc(100vw - 20px) !important;
+    max-width:calc(100vw - 20px) !important;
   }
 }
 </style>
@@ -79,15 +135,7 @@ def prepare_cet1_investigation(question=None):
     st.session_state["real_cfo_question_compact"] = (
         question or DEFAULT_QUESTION
     )
-    st.session_state["real_cfo_popover_open"] = True
-
-
-def _popover_options():
-    settings = {"use_container_width": False}
-    options = inspect.signature(st.popover).parameters
-    if "key" in options and "on_change" in options:
-        settings.update(key="real_cfo_popover_open", on_change="rerun")
-    return settings
+    st.session_state["jarvis_open"] = True
 
 
 def _capital_bridge_chart(bridge):
@@ -256,32 +304,95 @@ def render_cet1_chat(evidence, *, compact=True):
         _send(question,evidence,history)
 
 
+def _render_jarvis_conversation(evidence):
+    """Dedicated floating-panel layout; standalone central Copilot untouched."""
+    bridge=build_cet1_bridge(evidence)
+    history=_get_thread(evidence)
+
+    # Keep the composer's contents across a contextual handoff from Morning
+    # Brief. Never copy these prompts to Synthetic session state.
+    queued=st.session_state.pop("real_cfo_question_compact",None)
+    if queued:
+        st.session_state["jarvis_composer_text"]=queued
+
+    # Scrollable, separate conversation area. The composer is a SIBLING of
+    # this container, never absolutely overlaid on the model's answer.
+    with st.container():
+        render_html('<span class="jarvis-history-marker" aria-hidden="true"></span>')
+        if not history:
+            st.info("Ask Jarvis about Group CET1, capital or risk-weighted assets.")
+            if st.button("Investigate Q2 2026 CET1",
+                         key="jarvis_first_investigation",
+                         use_container_width=True):
+                _send(DEFAULT_QUESTION,evidence,history)
+        for index,message in enumerate(history[-16:]):
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+                if message["role"]=="assistant":
+                    st.caption("AI interpretation · ABN factsheet · review underlying causes")
+                    if index==len(history[-16:])-1:
+                        # Evidence is deterministic, sourced and placed AFTER
+                        # the model reply (inside the scrollable body).
+                        with st.expander("Show CET1 visual evidence",expanded=False):
+                            render_cet1_visuals(bridge,compact=True)
+
+    # This footer follows the scroll area in normal Streamlit layout and
+    # cannot cover earlier assistant replies.
+    with st.form("jarvis_composer_form",clear_on_submit=True):
+        question=st.text_area(
+            "Ask Jarvis a follow-up",
+            placeholder="E.g. What does the RWA contribution mean?",
+            key="jarvis_composer_text",max_chars=800,height=70,
+        )
+        asked=st.form_submit_button("Send to Jarvis →",use_container_width=True)
+    if asked and question.strip():
+        _send(question,evidence,history)
+
+
 def render_floating_copilot(s):
-    """Show one floating launch balloon in the ACTIVE Real Data report only."""
+    """Persistent bottom-right Jarvis in every Real Data view.
+
+    The central Ask CFO Copilot radial action and its existing page are never
+    modified. Uses ONLY old-version-compatible st.container() without key.
+    """
     if not getattr(s,"is_reported",False):
         return
     render_html(BALLOON_CSS)
-    # Use the native Streamlit popover directly. The ABN-deployed version of
-    # the local Streamlit version does not support keyed containers.
-    # Real-only CSS fixes this native popover in the viewport corner.
-    with st.popover("✦ CFO Copilot", **_popover_options()):
-        render_html(
-            '<div class="real-cfo-panel-header">'
-            '<div class="real-cfo-panel-title">CFO Copilot</div>'
-            '<div class="real-cfo-panel-sub">'
-            'Live Group CET1 investigation · verified figures and follow-ups'
-            '</div></div>'
-        )
+    with st.container():
+        render_html('<span class="jarvis-root-marker" aria-hidden="true"></span>')
+        opened=bool(st.session_state.get("jarvis_open",False))
+        if not opened:
+            render_html('<span class="jarvis-closed-marker" aria-hidden="true"></span>')
+            if st.button("✦ Jarvis",key="jarvis_launcher"):
+                st.session_state["jarvis_open"]=True
+                st.rerun()
+            return
+
+        render_html('<span class="jarvis-open-marker" aria-hidden="true"></span>')
+        head,actions=st.columns([5,1],gap="small")
+        with head:
+            render_html(
+                '<div class="jarvis-heading">✦ Jarvis</div>'
+                '<div class="jarvis-subtitle">ABN CFO Assistant · Real Data</div>'
+            )
+        with actions:
+            if st.button("✕",key="jarvis_close",help="Close Jarvis"):
+                st.session_state["jarvis_open"]=False
+                st.rerun()
+
+        if st.button("New conversation",key="jarvis_reset",use_container_width=True):
+            st.session_state[HISTORY_KEY]=[]
+            st.session_state["jarvis_composer_text"]=""
+            st.rerun()
+
         if s.business_line:
             st.info(
-                "Group CET1 investigation only. Select Group reporting "
-                "to use the live Copilot. Segment financial questions "
-                "are not connected yet."
+                "Group CET1 investigation only. Switch to Group reporting "
+                "to use Jarvis; segment explanations are not yet supported."
             )
             return
         try:
             evidence=build_reported_evidence(s,"Capital")
-            render_cet1_chat(evidence,compact=True)
+            _render_jarvis_conversation(evidence)
         except ValueError:
-            st.error("Cannot verify the current CET1 figures; Copilot is unavailable.")
-            return
+            st.error("Reported capital values cannot be reconciled; Jarvis is unavailable.")
