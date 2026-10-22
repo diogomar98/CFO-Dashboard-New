@@ -10,7 +10,7 @@ from src.reported_copilot_partner import (
     answer_reported_cet1, bounded_chat_context, MAX_CONTEXT_TURNS,
 )
 from src.reported_copilot_balloon import (
-    _capital_bridge_chart, _quarter_comparison_chart, MAX_STORED_MESSAGES,
+    _capital_bridge_chart, MAX_STORED_MESSAGES,
     prepare_cet1_investigation, _popover_options,
 )
 
@@ -64,33 +64,23 @@ class FloatingCopilotTests(unittest.TestCase):
         repeated=[{"role":"user","content":str(i)} for i in range(30)]
         self.assertEqual(len(bounded_chat_context(repeated)),MAX_CONTEXT_TURNS)
 
-    def test_arithmetic_charts_are_not_model_generated(self):
-        bridge_chart=_capital_bridge_chart(self.bridge).to_dict()
-        # Altair stores Pandas inline observations under the datasets registry.
-        bridge_rows=bridge_chart.get("data",{}).get("values")
-        if bridge_rows is None:
-            bridge_rows=bridge_chart["datasets"][bridge_chart["data"]["name"]]
-        self.assertEqual(bridge_rows[0]["Effect"],"CET1 capital")
-        self.assertAlmostEqual(
-            bridge_rows[0]["pp"],
-            self.bridge["capital_component_pp"], places=7
-        )
-        self.assertAlmostEqual(
-            bridge_rows[1]["pp"],
-            self.bridge["rwa_component_pp"], places=7
-        )
-        ratio_chart=_quarter_comparison_chart(self.bridge).to_dict()
-        observations=ratio_chart.get("data",{}).get("values")
-        if observations is None:
-            observations=ratio_chart["datasets"][ratio_chart["data"]["name"]]
-        self.assertEqual(len(observations),2)
-        self.assertEqual(observations[0]["Quarter"],"Q1 2026")
-        self.assertEqual(observations[1]["Quarter"],"Q2 2026")
-        self.assertAlmostEqual(
-            observations[1]["Ratio"]-observations[0]["Ratio"],
-            self.bridge["capital_component_pp"]+self.bridge["rwa_component_pp"],
-            places=7,
-        )
+    def test_single_compact_cet1_bridge_has_verified_parts_and_total(self):
+        spec=_capital_bridge_chart(self.bridge).to_dict()
+        # Altair layers may move a Pandas frame into top-level "datasets".
+        first=spec["layer"][0]
+        data=first["data"]
+        rows=data.get("values")
+        if rows is None:
+            rows=spec["datasets"][data["name"]]
+        self.assertEqual([r["Effect"] for r in rows],["Capital","RWA","Total"])
+        self.assertAlmostEqual(rows[0]["pp"],self.bridge["capital_component_pp"],places=7)
+        self.assertAlmostEqual(rows[1]["pp"],self.bridge["rwa_component_pp"],places=7)
+        self.assertAlmostEqual(rows[2]["pp"],self.bridge["reported_delta_pp"],places=7)
+        self.assertAlmostEqual(rows[0]["pp"]+rows[1]["pp"],rows[2]["pp"],places=7)
+        self.assertEqual(len(spec["layer"]),2)  # bars and readable value labels
+        self.assertEqual(first["encoding"]["x"]["field"],"Effect")
+        self.assertEqual(first["encoding"]["y"]["field"],"pp")
+        self.assertEqual(spec["height"],175)
 
     def test_floating_launch_in_real_home_and_report_only(self):
         app=Path("main.py").read_text(encoding="utf-8")
@@ -106,7 +96,10 @@ class FloatingCopilotTests(unittest.TestCase):
         self.assertIn("st.rerun()",view)
         self.assertIn("st.altair_chart",view)
         self.assertIn("Visual breakdown",view)
-        self.assertIn("st.container(key=\"real_cfo_balloon_anchor\")",view)
+        self.assertNotIn('st.container(key=',view)
+        self.assertIn('with st.popover("✦ CFO Copilot", **_popover_options()):',view)
+        self.assertIn('div[data-testid="stPopover"]',view)
+        self.assertNotIn('_quarter_comparison_chart',view)
         self.assertNotIn("requests.post",view)
         self.assertNotIn("genie_partner",view)
 
