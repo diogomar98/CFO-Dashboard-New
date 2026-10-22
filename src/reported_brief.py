@@ -526,11 +526,20 @@ def _prototype_article(article):
     except (TypeError, ValueError):
         confidence = float("nan")
     if pd.notna(confidence):
-        conf = confidence_badge(confidence_probability(
-            confidence, "Prototype classifier confidence in potential bank impact"
-        ))
+        # For official news, the confidence is a model's uncalibrated,
+        # subjective relevance judgment, NOT impact probability.
+        basis=val(
+            "confidence_basis",
+            "Prototype classifier confidence in potential bank impact",
+        )
+        conf = confidence_badge(confidence_probability(confidence,basis))
     else:
-        conf = '<span class="feed-source">Confidence unavailable</span>'
+        conf = (
+            '<span class="conf-badge" title="No model score is available; '
+            'no confidence has been inferred">Confidence · Not assessed</span>'
+            if val("news_origin")=="official" else
+            '<span class="feed-source">Confidence unavailable</span>'
+        )
     url = val("source_url").strip()
     parsed = urlsplit(url)
     if parsed.scheme.lower() in {"http", "https"} and parsed.netloc:
@@ -540,96 +549,137 @@ def _prototype_article(article):
         )
     else:
         source_link = f'<span class="feed-source">{source} · source link unavailable</span>'
+    official=val("news_origin")=="official"
+    relevance_word="relevance" if official else "impact"
+    summary_label=(
+        "AI relevance" if val("ai_assessed")=="yes" else "Official excerpt"
+    ) if official else ""
+    summary_html=(
+        f'<strong>{summary_label}</strong> {detail}'
+        if summary_label else detail
+    )
+    origin_note=html.escape(val(
+        "source_note","Public source · bank impact is prototype analysis"
+    ))
+    followup=(
+        '<div class="feed-detail"><strong>Next</strong> '
+        'Inspect the official article and review available What-If assumptions.</div>'
+        if official else ""
+    )
     return (
         '<article class="feed-item rb-news-item">'
         '<div class="feed-item-top">'
         f'<span class="feed-tag">{category}</span>'
         f'<span class="feed-date">{date}</span>'
-        f'<span class="feed-status status-impact-{level.lower()}">{html.escape(level.title())} impact</span>'
+        f'<span class="feed-status status-impact-{level.lower()}">'
+        f'{html.escape(level.title())} {relevance_word}</span>'
         '</div>'
         f'<div class="feed-headline">{headline}</div>'
-        f'<div class="feed-detail">{detail}</div>'
+        f'<div class="feed-detail">{summary_html}</div>'
         f'<div class="feed-detail"><strong>Potential metric</strong> {metric}</div>'
-        '<div class="feed-foot">' + conf + source_link + '</div></article>'
+        +followup+
+        '<div class="feed-foot">' + conf + source_link + '</div>'
+        f'<div class="feed-detail">{origin_note}</div></article>'
     )
 
 
-def _external_news():
-    """Restore the original visually rich news feed using only real ECB items.
+def _official_article_card(article, classification=None, *, saved=False):
+    """Reuse the original external-news layout for genuine ECB articles.
 
-    Live ECB RSS when reachable; otherwise a clearly timestamped, independently
-    verified ECB RSS snapshot. Never use Synthetic news fixtures in Real mode.
+    Only the AI Gateway may supply impact *relevance* and a model-reported,
+    uncalibrated confidence score. Missing assessments remain unrated.
     """
-    from src.reported_news import recent_official_articles
+    classification=classification or {}
+    relevance=classification.get("relevance","UNRATED")
+    if relevance not in {"HIGH","MEDIUM","LOW"}:
+        relevance="UNRATED"
+    metric=classification.get("metric") or "Not assessed"
+    terms=set(article.get("relevant_terms",[]))
+    if metric=="Not assessed":
+        if terms.intersection({"monetary policy","deposit facility","interest rate"}):
+            metric="Rates / NIM / NII (keyword watch)"
+        elif terms.intersection({"liquidity","funding"}):
+            metric="Liquidity / funding (keyword watch)"
+        elif "credit" in terms:
+            metric="Credit conditions (keyword watch)"
+        elif terms.intersection({"capital","banking supervision"}):
+            metric="Capital / supervision (keyword watch)"
+        else:
+            metric="Unclassified (official release)"
+    reasoning=classification.get("reason","").strip()
+    return _prototype_article({
+        "news_origin":"official",
+        "ai_assessed":"yes" if relevance!="UNRATED" else "no",
+        "category":"ECB · Saved" if saved else "ECB · Live",
+        "headline":article["headline"],
+        "source":article["source"],
+        "published_date":article["published"],
+        "source_url":article["url"],
+        "bank_impact_summary":(
+            reasoning if reasoning else article.get("summary") or
+            "See the official source for the full statement."
+        ),
+        "primary_affected_metric":metric,
+        "potential_impact_level":relevance,
+        "confidence_score":classification.get("confidence"),
+        "confidence_basis":(
+            "Uncalibrated model assessment of how clearly the official "
+            "headline/excerpt supports the relevance label. Not the "
+            "probability of a real financial impact."
+        ),
+        "source_note":(
+            "Saved official ECB news; historical snapshot, NOT live."
+            if saved else "Live ECB RSS headline; bank impact unverified."
+        ),
+    })
+
+
+def _external_news():
+    """Original external-news card palette + confidence on real ECB source data.
+
+    Uses the same gateway as Jarvis/Synthetic signal processing. If the
+    gateway is unavailable, the official articles still render as UNRATED
+    with no confidence number; never infer an unmeasured impact.
+    """
+    from src.reported_news import (
+        recent_official_articles, official_article_classifications,
+    )
     st.markdown("### External news & developments")
     articles,warnings,status=recent_official_articles(include_status=True)
-    is_snapshot=status["mode"]=="snapshot"
-    cards=[]
-    for article in articles[:4]:
-        headline=html.escape(article["headline"])
-        summary=html.escape(article["summary"][:235])
-        source=html.escape(article["source"])
-        day=html.escape(article["published"][:10])
-        url=html.escape(article["url"],quote=True)
-        terms=set(article.get("relevant_terms",[]))
-        # Keyword/topic watch is NOT an AI impact classification or model output.
-        if terms.intersection({"monetary policy","deposit facility","interest rate"}):
-            topic="Policy rates · NIM/NII watch"
-        elif terms.intersection({"liquidity","funding"}):
-            topic="Liquidity / funding watch"
-        elif "credit" in terms:
-            topic="Credit conditions watch"
-        elif terms.intersection({"capital","banking supervision"}):
-            topic="Capital / supervision watch"
-        else:
-            topic="Macro / policy watch"
-        badges=(
-            '<span class="feed-status status-impact-low">Saved ECB</span>'
-            if is_snapshot else
-            '<span class="feed-status status-impact-low">Live source</span>'
-        )
-        cards.append(
-            '<article class="feed-item rb-news-item">'
-            '<div class="feed-item-top">'
-            '<span class="feed-tag">ECB / public</span>'
-            f'<span class="feed-date">{day}</span>'+badges+
-            '</div>'
-            f'<div class="feed-headline">{headline}</div>'
-            '<div class="feed-detail"><strong>Why it matters</strong> '
-            f'{summary or "Official ECB announcement; inspect the original release."}</div>'
-            '<div class="feed-detail"><strong>Potential metric</strong> '
-            f'{html.escape(topic)} (keyword watch; impact unverified)</div>'
-            '<div class="feed-detail"><strong>Next</strong> '
-            'Review the announcement and any independently verified '
-            'scenario assumptions in News Intelligence.</div>'
-            '<div class="feed-foot">'
-            '<span class="feed-source">Official public source · no causal claim</span>'
-            f'<a class="news-source-link" href="{url}" target="_blank" '
-            f'rel="noopener noreferrer">{source} ↗</a>'
-            '</div></article>'
-        )
+    saved=status["mode"]=="snapshot"
+    ratings,model_status=official_article_classifications(articles)
+    cards=[
+        _official_article_card(a,ratings.get(a["id"]),saved=saved)
+        for a in articles[:4]
+    ]
     if cards:
         content='<div class="rb-news-grid">'+"".join(cards)+'</div>'
         last_update=html.escape(
             status.get("retrieved_at_utc","")[:16].replace("T"," ")+" UTC"
-            if is_snapshot else "Live ECB RSS"
+            if saved else "Live ECB RSS"
         )
     else:
         content=(
-            '<div class="feed-empty">No approved ECB news is available. '
-            'Check News Intelligence for connection diagnostics. '
-            'No synthetic items have been inserted.</div>'
+            '<div class="feed-empty">No official-source news available. '
+            'Check News Intelligence for ECB connection diagnostics; '
+            'Synthetic news has not been substituted.</div>'
         )
-        last_update="Source unavailable"
-    note=(
-        "Saved official ECB headlines collected on "
-        +html.escape(status["retrieved_at_utc"][:16].replace("T"," "))
-        +" UTC. Live ECB access failed in this workspace; articles may be "
-        "out of date. These are not Synthetic fixtures or verified bank impacts."
-        if is_snapshot else
-        "Official ECB RSS headlines. Topic watches are transparent keyword "
-        "tags—not AI model classifications or verified ABN impacts."
-    )
+        last_update="Unavailable"
+    if saved:
+        note=(
+            "Saved official ECB headlines retrieved on "
+            +html.escape(status["retrieved_at_utc"][:16].replace("T"," "))
+            +" UTC. ABN cannot reach live ECB RSS. These articles can be "
+            "ranked by the AI Gateway, but are NOT current monitoring."
+        )
+    else:
+        note=(
+            "Official ECB RSS headlines. Relevance and confidence come "
+            "from the AI Gateway, when available; they are subjective "
+            "classifications, NOT validated impacts on ABN financials."
+        )
+    if model_status:
+        note+=" AI ranking unavailable; confidence is shown as Not assessed."
     render_html(
         '<section class="feed-frame is-external rb-news-wide">'
         '<div class="feed-frame-head">'
