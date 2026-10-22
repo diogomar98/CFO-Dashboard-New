@@ -20,7 +20,7 @@ from src.reported_copilot_partner import (
 BALLOON_CSS = """
 <style>
 /* Deliberately scoped: no visual or behavioural change in Synthetic mode. */
-/* ABN runs a Streamlit version without st.container(key=...). The
+/* ABN runs a Streamlit version without keyed containers. The
    balloon is the only native popover in the Real Data view, so style its
    native wrapper directly instead of depending on keyed containers. */
 div[data-testid="stPopover"] {
@@ -262,7 +262,7 @@ def render_floating_copilot(s):
         return
     render_html(BALLOON_CSS)
     # Use the native Streamlit popover directly. The ABN-deployed version of
-    # st.container does not support the key= argument (confirmed traceback).
+    # the local Streamlit version does not support keyed containers.
     # Real-only CSS fixes this native popover in the viewport corner.
     with st.popover("✦ CFO Copilot", **_popover_options()):
         render_html(
