@@ -17,6 +17,7 @@ from hashlib import sha256
 from html import unescape
 from html.parser import HTMLParser
 from io import StringIO
+from pathlib import Path
 import json
 import math
 import re
@@ -111,24 +112,107 @@ def parse_ecb_rss(xml_bytes, name, *, now=None):
     return output
 
 
+def _safe_source_error(exc):
+    """Provide meaningful diagnostics without logging corporate proxy details."""
+    if isinstance(exc, requests.exceptions.SSLError):
+        return "TLS/certificate validation failed (check ABN corporate CA trust)"
+    if isinstance(exc, requests.exceptions.ProxyError):
+        return "Corporate proxy rejected or could not forward HTTPS request"
+    if isinstance(exc, requests.exceptions.ConnectTimeout):
+        return "HTTPS connection timed out (possible outbound firewall/egress block)"
+    if isinstance(exc, requests.exceptions.ReadTimeout):
+        return "ECB feed response timed out"
+    if isinstance(exc, requests.exceptions.ConnectionError):
+        return "Outbound HTTPS/DNS connection failed"
+    if isinstance(exc, requests.exceptions.HTTPError):
+        code = getattr(getattr(exc, "response", None), "status_code", None)
+        return f"ECB server returned HTTP {code}" if code else "HTTP error"
+    if isinstance(exc, ElementTree.ParseError):
+        return "Response was not valid XML (possible proxy login or HTML response)"
+    if isinstance(exc, ValueError):
+        return str(exc)[:140] if str(exc) in {
+            "Oversized ECB news feed.", "External XML entities are not allowed.",
+            "Expected official ECB RSS document.",
+        } else "Unexpected feed structure / validation failure"
+    return "Unexpected source connection error"
+
+
 def fetch_ecb_articles(*, session=None, now=None):
-    """Explicit, allowlisted HTTPS feeds; no arbitrary URL fetch or redirects."""
+    """Allowlisted official HTTPS feeds. Report failures without exposing secrets."""
     client=session or requests
     found={}
     warnings=[]
     for label,url in OFFICIAL_FEEDS:
         try:
-            response=client.get(url,timeout=12,allow_redirects=False,
-                                headers={"Accept":"application/rss+xml, application/xml"})
+            response=client.get(
+                url,timeout=12,allow_redirects=False,
+                headers={"Accept":"application/rss+xml, application/xml"},
+            )
+            if 300 <= getattr(response,"status_code",200) < 400:
+                raise ValueError("Unexpected ECB RSS redirect")
             response.raise_for_status()
             if len(response.content)>MAX_FEED_BYTES:
-                raise ValueError("RSS response exceeds allowed size.")
-            for article in parse_ecb_rss(response.content,label,now=now):
+                raise ValueError("Oversized ECB news feed.")
+            items=parse_ecb_rss(response.content,label,now=now)
+            if not items:
+                warnings.append(f"{label}: feed retrieved but no valid articles found")
+            for article in items:
                 found[article["id"]]=article
         except (requests.RequestException,ValueError,ElementTree.ParseError) as exc:
-            warnings.append(f"{label}: {type(exc).__name__}; source not loaded")
+            warnings.append(f"{label}: {_safe_source_error(exc)}")
     output=sorted(found.values(),key=lambda a:a["published"],reverse=True)
     return output[:MAX_ARTICLES],warnings
+
+
+SNAPSHOT_PATH = Path(__file__).resolve().parent.parent / "data" / "ecb_news_snapshot.json"
+
+
+def load_official_news_snapshot(path=None, *, now=None):
+    """Load a reviewed dated ECB RSS snapshot, not a Synthetic news fixture.
+
+    Returns articles and source metadata; no live/fresh claim, no numeric
+    scenario input. Every displayed item is validated against the ECB host.
+    """
+    location=Path(path) if path is not None else SNAPSHOT_PATH
+    if not location.is_file():
+        return [], {"error":"Verified public-news snapshot not installed"}
+    try:
+        if location.stat().st_size>120_000:
+            raise ValueError("Oversized snapshot")
+        data=json.loads(location.read_text(encoding="utf-8"))
+        if data.get("source_type")!="official_ecb_rss":
+            raise ValueError("Unexpected snapshot type")
+        stamp=datetime.fromisoformat(data["retrieved_at_utc"].replace("Z","+00:00"))
+        if stamp.tzinfo is None:
+            raise ValueError("Snapshot missing timezone")
+        check_now=now or datetime.now(timezone.utc)
+        if stamp>check_now+timedelta(minutes=10):
+            raise ValueError("Future-dated snapshot")
+        articles=[]
+        for raw in data["articles"][:MAX_ARTICLES]:
+            url=raw.get("url","")
+            if not _official_link(url):
+                continue
+            published=datetime.fromisoformat(raw["published"].replace("Z","+00:00"))
+            if published.tzinfo is None or published>stamp+timedelta(days=1):
+                continue
+            articles.append({
+                "id":sha256(url.encode("utf-8")).hexdigest()[:16],
+                "headline":plain_text(raw.get("headline",""))[:220],
+                "url":url,
+                "source":str(raw.get("source","ECB"))[:80],
+                "published":published.isoformat(),
+                "summary":plain_text(raw.get("summary",""))[:700],
+                "relevant_terms":[str(t)[:40] for t in raw.get("relevant_terms",[])[:12]],
+            })
+        return articles, {
+            "source":"Reviewed ECB RSS snapshot",
+            "retrieved_at_utc":stamp.isoformat(),
+            "mode":"snapshot",
+            "count":len(articles),
+        }
+    except (KeyError,TypeError,ValueError,json.JSONDecodeError,OSError,AttributeError):
+        return [], {"error":"Verified news snapshot could not be validated"}
 
 
 def _extract_json(response):
