@@ -13,7 +13,7 @@ import streamlit as st
 from src.hud import render_html
 from src.reported_copilot_evidence import build_reported_evidence
 from src.reported_copilot_partner import (
-    DEFAULT_QUESTION, answer_reported_cet1, build_cet1_bridge,
+    DEFAULT_QUESTION, answer_reported_question, build_cet1_bridge,
 )
 
 
@@ -29,8 +29,8 @@ div[data-testid="stVerticalBlock"]:has(.jarvis-root-marker):not(
     bottom:20px !important;
     right:24px !important;
     z-index:1000000 !important;
-    width:min(470px,calc(100vw - 24px)) !important;
-    max-width:min(470px,calc(100vw - 24px)) !important;
+    width:min(560px,calc(100vw - 24px)) !important;
+    max-width:min(560px,calc(100vw - 24px)) !important;
     background:linear-gradient(160deg,#102118,#07120C) !important;
     border:1px solid rgba(72,187,111,.63) !important;
     border-radius:14px !important;
@@ -41,9 +41,10 @@ div[data-testid="stVerticalBlock"]:has(.jarvis-root-marker):not(
 div[data-testid="stVerticalBlock"]:has(.jarvis-root-marker):not(
   :has(div[data-testid="stVerticalBlock"] .jarvis-root-marker)
 ):has(.jarvis-open-marker) {
-    height:min(700px,calc(100dvh - 42px)) !important;
-    max-height:calc(100dvh - 42px) !important;
-    overflow:hidden !important;
+    height:min(800px,calc(100dvh - 24px)) !important;
+    max-height:calc(100dvh - 24px) !important;
+    overflow-y:auto !important;
+    overflow-x:hidden !important;
     display:flex !important;
     flex-direction:column !important;
     gap:7px !important;
@@ -78,13 +79,13 @@ div[data-testid="stVerticalBlock"]:has(.jarvis-closed-marker):not(
 div[data-testid="stVerticalBlockBorderWrapper"]:has(.jarvis-history-marker):not(
   :has(div[data-testid="stVerticalBlockBorderWrapper"] .jarvis-history-marker)
 ) {
-    max-height:calc(min(700px,100dvh - 42px) - 300px) !important;
+    max-height:calc(min(800px,100dvh - 24px) - 250px) !important;
     min-height:0 !important;
     overflow-y:auto !important;
     flex:1 1 auto !important;
 }
 .jarvis-root-marker,.jarvis-open-marker,.jarvis-closed-marker,
-.jarvis-history-marker {display:none;}
+.jarvis-history-marker,.cfo-thread-history-marker {display:none;}
 .jarvis-heading {font-weight:850;font-size:1.05rem;color:#E3FFEA;}
 .jarvis-subtitle {font-size:.67rem;color:#A9CCB2;margin-top:.1rem;}
 div[data-testid="stVerticalBlock"]:has(.jarvis-history-marker):not(
@@ -92,8 +93,10 @@ div[data-testid="stVerticalBlock"]:has(.jarvis-history-marker):not(
 ) {
     overflow-y:auto !important;
     overscroll-behavior:contain;
-    min-height:150px !important;
-    max-height:calc(min(700px,100dvh - 42px) - 300px) !important;
+    min-height:160px !important;
+    height:min(520px,calc(100dvh - 280px)) !important;
+    max-height:min(520px,calc(100dvh - 280px)) !important;
+    flex:1 1 auto !important;
     padding:8px !important;
     background:rgba(2,10,6,.65) !important;
     border:1px solid rgba(76,145,92,.29) !important;
@@ -113,13 +116,28 @@ div[data-testid="stVerticalBlock"]:has(.jarvis-root-marker):not(
     min-height:66px !important;
     background:#101C19 !important;
 }
+/* Older ABN Streamlit: independent scroll area in central Ask CFO Copilot. */
+div[data-testid="stVerticalBlock"]:has(.cfo-thread-history-marker):not(
+  :has(div[data-testid="stVerticalBlock"] .cfo-thread-history-marker)
+) {
+    max-height:min(450px,48vh) !important;
+    overflow-y:auto !important;
+    overflow-x:hidden !important;
+    min-height:170px !important;
+    padding:10px !important;
+    border:1px solid rgba(76,145,92,.29);
+    border-radius:8px;
+}
 div[data-testid="stVerticalBlock"]:has(.jarvis-root-marker):not(
   :has(div[data-testid="stVerticalBlock"] .jarvis-root-marker)
 ) [data-testid="stForm"] {
-    background:rgba(11,32,20,.96);
+    background:rgba(11,32,20,.98);
     padding:.45rem .55rem !important;
     border-top:1px solid rgba(86,159,109,.35);
     border-radius:7px;
+    position:relative;
+    z-index:3;
+    flex-shrink:0 !important;
 }
 /* Streamlit dialogs can create an opaque backdrop; Jarvis lives inside
    the active Real Data dialog and is therefore interactive above it. */
@@ -223,7 +241,7 @@ def render_cet1_visuals(bridge, compact=True):
 
 def _get_thread(evidence):
     """One thread across all Real Data pages, reset for different source scope."""
-    signature=(evidence["scope"],evidence["as_of"],evidence["source"])
+    signature=(evidence["scope"],evidence["as_of"],evidence["source"],evidence["topic"])
     if st.session_state.get(CONTEXT_KEY)!=signature:
         st.session_state[CONTEXT_KEY]=signature
         st.session_state[HISTORY_KEY]=[]
@@ -233,13 +251,13 @@ def _get_thread(evidence):
 def _send(question,evidence,history):
     """Carry bounded verified-evidence chat context into each gateway call."""
     question=question.strip()
-    if not question or len(question)>800:
-        st.warning("Ask one CET1 question of at most 800 characters.")
+    if not question or len(question)>1200:
+        st.warning("Ask one question of at most 1,200 characters.")
         return
     previous=list(history)
     with st.spinner("Investigating the reported figures…"):
         try:
-            result=answer_reported_cet1(question,evidence,history=previous)
+            result=answer_reported_question(question,evidence,history=previous)
         except Exception as exc:
             # Avoid leaking authorization headers, URLs, token values or body.
             st.error(
@@ -262,7 +280,6 @@ def render_cet1_chat(evidence, *, compact=True):
     """Full multi-turn interaction reused in balloon and existing Copilot page."""
     bridge=build_cet1_bridge(evidence)
     history=_get_thread(evidence)
-    render_cet1_visuals(bridge,compact=compact)
     st.caption(
         "Your follow-up questions keep the previous conversation as context. "
         "Only the cited factsheet and arithmetic are authoritative."
@@ -393,14 +410,8 @@ def render_floating_copilot(s):
             st.session_state["jarvis_composer_text"]=""
             st.rerun()
 
-        if s.business_line:
-            st.info(
-                "Group CET1 investigation only. Switch to Group reporting "
-                "to use Jarvis; segment explanations are not yet supported."
-            )
-            return
         try:
-            evidence=build_reported_evidence(s,"Capital")
+            evidence=build_reported_evidence(s,"All reported metrics")
             _render_jarvis_conversation(evidence)
-        except ValueError:
-            st.error("Reported capital values cannot be reconciled; Jarvis is unavailable.")
+        except (ValueError,FileNotFoundError):
+            st.error("Reported financial evidence is unavailable; Jarvis cannot answer.")
