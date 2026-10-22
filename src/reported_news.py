@@ -75,6 +75,8 @@ def _queue_rate_scenario(evidence):
         "rate_shock_bps":shock,
         "rate_effective_date":evidence["rate_effective_date"],
         "official_data_url":evidence["official_data_url"],
+        "article_url":evidence.get("article_url"),
+        "article_title":evidence.get("article_title"),
         "status":evidence["status"],
     }
     navigate_to_module("scenario")
@@ -145,6 +147,13 @@ def render_reported_news(s):
         +". Feed summaries are not the same as complete articles. "
         "No user or bank-specific financial data are transmitted to the news classifier."
     )
+    try:
+        rate_events=load_verified_ecb_rate_events()
+        official_change=current_verified_ecb_change(report,events=rate_events)
+    except Exception:
+        rate_events=None
+        official_change=None
+        warnings.append("Official ECB rate-data verification unavailable")
     feed_col,scenario_col=st.columns([1.4,1],gap="large")
     with feed_col:
         st.markdown("#### Recent developments")
@@ -152,6 +161,16 @@ def render_reported_news(s):
             st.info("No verified public headlines could be retrieved; there is no synthetic fallback.")
         for article in fresh[:10]:
             render_html(_card(article,by_status.get(article["id"],{})))
+            if rate_events is not None:
+                reviewed=verified_rate_scenario(
+                    article,rate_events,
+                    reported_dfr=float(report.iloc[-1]["dfr_qend_pct"]),
+                )
+                if reviewed and st.button(
+                    f"Review verified ECB rate move ({reviewed['rate_shock_bps']:+d} bps) ↗",
+                    key="rn_event_"+article["id"],use_container_width=True,
+                ):
+                    _queue_rate_scenario(reviewed)
 
     with scenario_col:
         st.markdown("#### From public news to What-If")
@@ -160,10 +179,7 @@ def render_reported_news(s):
             "facility rate. Other AI-detected topics remain watchlist items "
             "until a validated financial scenario model exists."
         )
-        try:
-            official_change=current_verified_ecb_change(report)
-        except Exception:
-            official_change=None
+        if rate_events is None:
             st.warning(
                 "Official ECB rate verification is unavailable. "
                 "No rate scenario can be prepared."
