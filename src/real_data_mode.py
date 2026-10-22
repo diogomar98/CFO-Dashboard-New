@@ -383,6 +383,16 @@ def render_reported_module(module, s):
         render_reported_horizon(s)
         return
 
+    if module == "news":
+        # Official ECB feeds and verified rate-data handoff, never Synthetic fixtures.
+        from src.reported_news import render_reported_news
+        render_reported_news(s)
+        return
+
+    if module == "strategy":
+        st.info("Opportunity has been removed from the Real Data dashboard.")
+        return
+
     if module == "treasury":
         st.markdown("#### Treasury | reported aggregates")
         cols = st.columns(3)
