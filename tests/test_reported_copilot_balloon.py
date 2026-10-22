@@ -95,7 +95,7 @@ class FloatingCopilotTests(unittest.TestCase):
         self.assertIn("clear_on_submit=True",view)
         self.assertIn("st.rerun()",view)
         self.assertIn("st.altair_chart",view)
-        self.assertIn("Visual breakdown",view)
+        self.assertIn("Show financial evidence",view)
         self.assertNotIn('st.container(key=',view)
         self.assertNotIn("st.popover(",view)
         self.assertIn('with st.container():',view)
@@ -103,21 +103,25 @@ class FloatingCopilotTests(unittest.TestCase):
         self.assertIn('st.button("✕"',view)
         self.assertIn('"jarvis_open"',view)
         self.assertIn('jarvis-history-marker',view)
-        self.assertIn('max-height:calc(min(700px,100dvh - 42px) - 300px)',view)
+        self.assertIn('height:min(800px,calc(100dvh - 24px))',view)
         self.assertIn('with st.form("jarvis_composer_form"',view)
-        self.assertIn('with st.chat_message(message["role"])',view)
+        self.assertIn('with st.chat_message(item["role"])',view)
         self.assertNotIn('_quarter_comparison_chart',view)
         self.assertNotIn("requests.post",view)
         self.assertNotIn("genie_partner",view)
 
-    def test_scope_does_not_enable_segment_cet1_prompt(self):
+    def test_segment_questions_are_limited_to_segment_disclosures(self):
         segment=build_reported_state("Corporate Banking")
         from src.reported_copilot_evidence import build_reported_evidence
         with self.assertRaises(ValueError):
             build_reported_evidence(segment,"Capital")
-        view=Path("src/reported_copilot_balloon.py").read_text(encoding="utf-8")
-        self.assertIn("if s.business_line:",view)
-        self.assertIn("Group CET1 investigation only",view)
+        packet=build_reported_evidence(segment,"All reported metrics")
+        self.assertEqual(packet["scope"],"Corporate Banking")
+        self.assertTrue(packet["llm_enabled"])
+        self.assertEqual({m["field"] for m in packet["metrics"]},
+                         {"loans_m","deposits_m","rwa_m"})
+        self.assertEqual(len(packet["quarterly_history"]),7)
+        self.assertNotIn("cet1_ratio_pct",str(packet))
 
     def test_brief_can_prepare_contextual_cet1_followup(self):
         from src.reported_copilot_partner import DEFAULT_QUESTION
