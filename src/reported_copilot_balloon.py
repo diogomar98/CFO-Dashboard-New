@@ -226,7 +226,13 @@ def render_cet1_chat(evidence, *, compact=True):
         history.clear()
 
     if history:
-        with st.container(height=260 if compact else 420):
+        # Height was added before keyed containers, but older ABN runtimes may
+        # lack it too. Keep follow-up chat functional without either argument.
+        container_args = (
+            {"height":260 if compact else 420}
+            if "height" in inspect.signature(st.container).parameters else {}
+        )
+        with st.container(**container_args):
             for message in history[-16:]:
                 with st.chat_message(message["role"]):
                     st.markdown(message["content"])
