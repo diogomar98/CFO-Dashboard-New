@@ -118,8 +118,9 @@ def render_cet1_visuals(bridge, compact=True):
     a.metric("Q1 ratio",f"{bridge['previous_ratio_pct']:.2f}%")
     b.metric("Q2 ratio",f"{bridge['latest_ratio_pct']:.2f}%")
     c.metric("Movement",f"{bridge['reported_delta_pp']:+.3f}pp")
+    # Expand the chart automatically once a real answer is in the thread.
     with st.expander("Visual breakdown · CET1 / capital / RWA",
-                     expanded=not compact):
+                     expanded=(not compact or bool(st.session_state.get(HISTORY_KEY)))):
         st.caption(
             "Numerator-first arithmetic, not an explanation of underlying "
             "business causes. Values are from ABN AMRO Q2 2026 factsheet."
@@ -172,14 +173,9 @@ def _send(question,evidence,history):
     ])
     if len(history)>MAX_STORED_MESSAGES:
         del history[:-MAX_STORED_MESSAGES]
-    with st.chat_message("user"):
-        st.markdown(question)
-    with st.chat_message("assistant"):
-        st.markdown(result["answer"])
-        st.caption(
-            "AI interpretation · factsheet-backed values · "
-            "underlying causes require additional evidence"
-        )
+    # A rerun restores the entire thread, keeps the native popover open,
+    # and expands the deterministic evidence charts beside the latest answer.
+    st.rerun()
 
 
 def render_cet1_chat(evidence, *, compact=True):
