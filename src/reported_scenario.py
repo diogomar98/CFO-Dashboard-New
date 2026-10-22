@@ -229,6 +229,23 @@ def render_reported_scenario(s):
             f"Scope selected: {s.business_line}. This sensitivity analysis is "
             "for ABN AMRO GROUP only, not segment results."
         )
+    news_source=st.session_state.get("rs_news_source")
+    if news_source:
+        current=st.session_state.get("rs_public_options",{})
+        if current.get("rate_shock_bps")==float(news_source["rate_shock_bps"]):
+            st.info(
+                "Official ECB rate update prepared from News Intelligence: "
+                f"{news_source['rate_shock_bps']:+d} bps effective "
+                f"{news_source['rate_effective_date']}. This is an observed "
+                "policy-rate move since the Q2 2026 model cutoff, not a "
+                "modelled financial effect. Review or change the assumptions "
+                "below before using the results."
+            )
+            st.caption(
+                "Official source: "+news_source["official_data_url"]
+            )
+        else:
+            st.session_state.pop("rs_news_source",None)
     try:
         public=load_public_horizon_inputs(s.reported_group)
     except (ValueError,FileNotFoundError,KeyError) as exc:
