@@ -99,6 +99,47 @@ class ReportedNewsTests(unittest.TestCase):
         self.assertIn(example["headline"],prompt)
         self.assertNotIn("data/abn_quarterly.csv",prompt)
 
+    def test_real_headline_ai_confidence_is_optional_and_uncalibrated(self):
+        example=self.policy_article
+        result={
+            "articles":[{
+                "id":example["id"],"relevance":"HIGH","metric":"Rates",
+                "reason":"Headline contains an ECB monetary-policy decision.",
+                "confidence":0.81,
+            }],
+        }
+        scored=classify_headlines(
+            [example],generate=lambda _:json.dumps(result),
+        )
+        self.assertEqual(scored[0]["confidence"],0.81)
+        self.assertIn("uncalibrated",scored[0]["classifier_status"])
+        result["articles"][0]["confidence"]=5
+        invalid=classify_headlines(
+            [example],generate=lambda _:json.dumps(result),
+        )
+        self.assertIsNone(invalid[0]["confidence"])
+        result["articles"][0].pop("confidence")
+        missing=classify_headlines(
+            [example],generate=lambda _:json.dumps(result),
+        )
+        self.assertIsNone(missing[0]["confidence"])
+
+    def test_snapshot_news_uses_gateway_with_no_external_news_fetch(self):
+        from src.reported_news import official_article_classifications
+        with patch("src.reported_news.load_real_news_ai_classification",
+                   return_value=[{"id":self.policy_article["id"],
+                                  "relevance":"MEDIUM","metric":"Rates",
+                                  "reason":"Potential impact","confidence":0.75}]) as model:
+            classifications,error=official_article_classifications([self.policy_article])
+        self.assertIsNone(error)
+        model.assert_called_once()
+        self.assertEqual(classifications[self.policy_article["id"]]["confidence"],0.75)
+        with patch("src.reported_news.load_real_news_ai_classification",
+                   side_effect=RuntimeError("unavailable")):
+            classifications,error=official_article_classifications([self.policy_article])
+        self.assertEqual(classifications,{})
+        self.assertIsNotNone(error)
+
     def test_ecb_rate_event_requires_date_and_verified_post_close_change(self):
         events=parse_ecb_rate_csv(
             "TIME_PERIOD,OBS_VALUE\n"
@@ -204,7 +245,7 @@ class ReportedNewsTests(unittest.TestCase):
         self.assertIn('st.session_state.get("rs_news_source")',scenario)
         self.assertIn("Official ECB rate update prepared",scenario)
         morning=Path("src/reported_brief.py").read_text(encoding="utf-8")
-        self.assertIn("from src.reported_news import recent_official_articles",morning)
+        self.assertIn("from src.reported_news import (",morning)
         self.assertIn("is-external rb-news-wide",morning)
 
 
