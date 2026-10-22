@@ -1,0 +1,261 @@
+"""Embedded Real Data Copilot balloon, chat turns and verified visual evidence.
+
+A native Streamlit popover stays inside the active report dialog or home.
+It never sends chart instructions to the LLM: all diagrams are computed from
+the same two published Group capital/RWA reporting quarters.
+"""
+import altair as alt
+import pandas as pd
+import streamlit as st
+
+from src.hud import render_html
+from src.reported_copilot_evidence import build_reported_evidence
+from src.reported_copilot_partner import (
+    DEFAULT_QUESTION, answer_reported_cet1, build_cet1_bridge,
+)
+
+
+BALLOON_CSS = """
+<style>
+/* Deliberately scoped: no visual or behavioural change in Synthetic mode. */
+.st-key-real_cfo_balloon_anchor {
+    position:fixed !important;
+    bottom:22px;
+    right:24px;
+    width:max-content !important;
+    max-width:calc(100vw - 30px);
+    z-index:1000000;
+}
+.st-key-real_cfo_balloon_anchor [data-testid="stPopover"] button {
+    background:linear-gradient(110deg,#0C2716,#173A25) !important;
+    border:1px solid #45C878 !important;
+    box-shadow:0 8px 34px rgba(0,0,0,.52),0 0 14px rgba(45,190,96,.17);
+    border-radius:100px !important;
+    color:#E7FBEA !important;
+    font-size:.86rem !important;
+    font-weight:750;
+    padding:.48rem 1.1rem;
+    min-height:42px;
+}
+div[data-testid="stPopoverBody"]:has(.real-cfo-panel-header) {
+    width:min(500px, calc(100vw - 24px)) !important;
+    max-height:min(78vh,850px) !important;
+    overflow-y:auto !important;
+    background:#0C1710 !important;
+    color:#D8ECE0 !important;
+    border:1px solid rgba(80,184,111,.55);
+    border-radius:10px !important;
+    box-shadow:0 16px 50px rgba(0,0,0,.65);
+}
+.real-cfo-panel-header {padding:.1rem 0 .5rem;}
+.real-cfo-panel-title {font-size:1.0rem;font-weight:800;color:#D7FFE0;letter-spacing:.025em;}
+.real-cfo-panel-sub {font-size:.67rem;color:#A6CAB1;line-height:1.45;}
+.real-cfo-visual-head {font-size:.71rem;font-weight:800;color:#B9DDC1;letter-spacing:.03em;}
+@media(max-width:650px){
+  .st-key-real_cfo_balloon_anchor {right:12px;bottom:12px;}
+  div[data-testid="stPopoverBody"]:has(.real-cfo-panel-header) {
+    width:calc(100vw - 24px) !important; max-height:75vh !important;
+  }
+}
+</style>
+"""
+HISTORY_KEY = "real_cfo_cet1_messages"
+CONTEXT_KEY = "real_cfo_cet1_evidence_context"
+MAX_STORED_MESSAGES = 24
+
+
+def _capital_bridge_chart(bridge):
+    """Arithmetic contributions in percentage points; no inferred causality."""
+    data=pd.DataFrame([
+        {"Effect":"CET1 capital","pp":bridge["capital_component_pp"],
+         "description":"Change in capital, holding prior RWA constant"},
+        {"Effect":"RWA denominator","pp":bridge["rwa_component_pp"],
+         "description":"Change in RWA, holding latest capital constant"},
+    ])
+    plot=alt.Chart(data).mark_bar(size=26,cornerRadiusEnd=2).encode(
+        y=alt.Y("Effect:N",sort=["CET1 capital","RWA denominator"],title=None,
+                axis=alt.Axis(labelColor="#B7D7C1",labelFontSize=11,domain=False,ticks=False)),
+        x=alt.X("pp:Q",title="Contribution to ratio movement (pp)",
+                scale=alt.Scale(zero=True),
+                axis=alt.Axis(labelColor="#A5C2AF",titleColor="#A5C2AF",gridColor="#1B3724")),
+        color=alt.condition(alt.datum.pp>=0,alt.value("#31C975"),alt.value("#E7A366")),
+        tooltip=[
+            alt.Tooltip("Effect:N"),
+            alt.Tooltip("pp:Q",format="+.3f",title="Contribution (pp)"),
+            alt.Tooltip("description:N",title="Method"),
+        ],
+    )
+    return plot.properties(height=100).configure_view(strokeOpacity=0).configure(
+        background="#0C1710"
+    )
+
+
+def _quarter_comparison_chart(bridge):
+    """Historical ratio bars (not AI-produced chart points)."""
+    data=pd.DataFrame([
+        {"Quarter":bridge["previous_quarter"],"Ratio":bridge["previous_ratio_pct"]},
+        {"Quarter":bridge["latest_quarter"],"Ratio":bridge["latest_ratio_pct"]},
+    ])
+    return alt.Chart(data).mark_bar(size=46,cornerRadiusEnd=3).encode(
+        x=alt.X("Quarter:N",sort=[bridge["previous_quarter"],bridge["latest_quarter"]],
+                axis=alt.Axis(labelColor="#B6D5BE",title=None,domain=False)),
+        y=alt.Y("Ratio:Q",scale=alt.Scale(zero=True),title="CET1 (%)",
+                axis=alt.Axis(gridColor="#1D3324",labelColor="#A3C1AC",titleColor="#A3C1AC")),
+        color=alt.Color("Quarter:N",scale=alt.Scale(
+            domain=[bridge["previous_quarter"],bridge["latest_quarter"]],
+            range=["#376D4C","#32CA73"]),legend=None),
+        tooltip=[alt.Tooltip("Quarter:N"),
+                 alt.Tooltip("Ratio:Q",format=".3f",title="Reported CET1 (%)")],
+    ).properties(height=145).configure_view(strokeOpacity=0).configure(
+        background="#0C1710"
+    )
+
+
+def render_cet1_visuals(bridge, compact=True):
+    """Always local, exact and source-backed, even if the AI call fails."""
+    st.markdown("**CET1 movement · verified financial evidence**")
+    a,b,c=st.columns(3)
+    a.metric("Q1 ratio",f"{bridge['previous_ratio_pct']:.2f}%")
+    b.metric("Q2 ratio",f"{bridge['latest_ratio_pct']:.2f}%")
+    c.metric("Movement",f"{bridge['reported_delta_pp']:+.3f}pp")
+    with st.expander("Visual breakdown · CET1 / capital / RWA",
+                     expanded=not compact):
+        st.caption(
+            "Numerator-first arithmetic, not an explanation of underlying "
+            "business causes. Values are from ABN AMRO Q2 2026 factsheet."
+        )
+        st.markdown('<div class="real-cfo-visual-head">CET1 capital and RWA contributions</div>',
+                    unsafe_allow_html=True)
+        st.altair_chart(_capital_bridge_chart(bridge),use_container_width=True)
+        st.markdown('<div class="real-cfo-visual-head">Reported quarterly CET1 ratio</div>',
+                    unsafe_allow_html=True)
+        st.altair_chart(_quarter_comparison_chart(bridge),use_container_width=True)
+        st.caption(
+            f"Capital €{bridge['previous_capital_eur_m']:,.1f}m → "
+            f"€{bridge['latest_capital_eur_m']:,.1f}m; "
+            f"RWA €{bridge['previous_rwa_eur_m']:,.1f}m → "
+            f"€{bridge['latest_rwa_eur_m']:,.1f}m. "
+            "Source: reported Group capital/RWA, Q1–Q2 2026."
+        )
+
+
+def _get_thread(evidence):
+    """One thread across all Real Data pages, reset for different source scope."""
+    signature=(evidence["scope"],evidence["as_of"],evidence["source"])
+    if st.session_state.get(CONTEXT_KEY)!=signature:
+        st.session_state[CONTEXT_KEY]=signature
+        st.session_state[HISTORY_KEY]=[]
+    return st.session_state[HISTORY_KEY]
+
+
+def _send(question,evidence,history):
+    """Carry bounded verified-evidence chat context into each gateway call."""
+    question=question.strip()
+    if not question or len(question)>800:
+        st.warning("Ask one CET1 question of at most 800 characters.")
+        return
+    previous=list(history)
+    with st.spinner("Investigating the reported figures…"):
+        try:
+            result=answer_reported_cet1(question,evidence,history=previous)
+        except Exception as exc:
+            # Avoid leaking authorization headers, URLs, token values or body.
+            st.error(
+                "The existing ABN AI Gateway could not answer this question. "
+                "No synthetic data was substituted."
+            )
+            st.caption(f"Error class: {type(exc).__name__}")
+            return
+    history.extend([
+        {"role":"user","content":question},
+        {"role":"assistant","content":result["answer"],"source":result["source"]},
+    ])
+    if len(history)>MAX_STORED_MESSAGES:
+        del history[:-MAX_STORED_MESSAGES]
+    with st.chat_message("user"):
+        st.markdown(question)
+    with st.chat_message("assistant"):
+        st.markdown(result["answer"])
+        st.caption(
+            "AI interpretation · factsheet-backed values · "
+            "underlying causes require additional evidence"
+        )
+
+
+def render_cet1_chat(evidence, *, compact=True):
+    """Full multi-turn interaction reused in balloon and existing Copilot page."""
+    bridge=build_cet1_bridge(evidence)
+    history=_get_thread(evidence)
+    render_cet1_visuals(bridge,compact=compact)
+    st.caption(
+        "Your follow-up questions keep the previous conversation as context. "
+        "Only the cited factsheet and arithmetic are authoritative."
+    )
+    controls=st.columns([1.9,1],gap="small")
+    with controls[0]:
+        initial=st.button(
+            "Investigate Q2 CET1",key="real_cfo_start_"+("compact" if compact else "full"),
+            use_container_width=True,disabled=bool(history),
+        )
+    with controls[1]:
+        clear=st.button(
+            "New conversation",key="real_cfo_clear_"+("compact" if compact else "full"),
+            use_container_width=True,
+        )
+    if clear:
+        history.clear()
+
+    if history:
+        with st.container(height=260 if compact else 420):
+            for message in history[-16:]:
+                with st.chat_message(message["role"]):
+                    st.markdown(message["content"])
+                    if message["role"]=="assistant":
+                        st.caption("Model interpretation · source review required")
+    else:
+        st.info("Start the CET1 investigation or enter your own first question.")
+    with st.form("real_cfo_chat_form_"+("compact" if compact else "full"),
+                 clear_on_submit=True):
+        question=st.text_area(
+            "Ask a follow-up",placeholder=(
+                "For example: What does the RWA contribution mean? "
+                "What evidence is needed to establish the cause?"
+            ),max_chars=800,height=72,
+            key="real_cfo_question_"+("compact" if compact else "full"),
+        )
+        asked=st.form_submit_button("Send question",use_container_width=True)
+    if initial:
+        _send(DEFAULT_QUESTION,evidence,history)
+    elif asked and question:
+        _send(question,evidence,history)
+
+
+def render_floating_copilot(s):
+    """Show one floating launch balloon in the ACTIVE Real Data report only."""
+    if not getattr(s,"is_reported",False):
+        return
+    render_html(BALLOON_CSS)
+    # st.container(key=...) produces an isolated CSS class, without changing
+    # Synthetic layout or copying the Gateway interface.
+    with st.container(key="real_cfo_balloon_anchor"):
+        with st.popover("✦ CFO Copilot",use_container_width=False):
+            render_html(
+                '<div class="real-cfo-panel-header">'
+                '<div class="real-cfo-panel-title">CFO Copilot</div>'
+                '<div class="real-cfo-panel-sub">'
+                'Live Group CET1 investigation · verified figures and follow-ups'
+                '</div></div>'
+            )
+            if s.business_line:
+                st.info(
+                    "Group CET1 investigation only. Select Group reporting "
+                    "to use the live Copilot. Segment financial questions "
+                    "are not connected yet."
+                )
+                return
+            try:
+                evidence=build_reported_evidence(s,"Capital")
+                render_cet1_chat(evidence,compact=True)
+            except ValueError:
+                st.error("Cannot verify the current CET1 figures; Copilot is unavailable.")
+                return
