@@ -1,4 +1,4 @@
-"""Real Data CFO Copilot — first live CET1 investigation on the existing gateway.
+"""Real Data CFO Copilot — open-ended sourced financial chat on existing gateway.
 
 Synthetic Copilot, its AI Gateway client implementation and Databricks Genie
 remain completely unchanged. Every request carries a fresh, bounded packet
@@ -72,13 +72,14 @@ def render_reported_copilot(s):
         '<div class="section-title">CFO Copilot · reported financial investigations</div>'
         '<div class="section-subtitle">'
         'Use the original corporate AI Gateway with verified factsheet context. '
-        'CET1 is the first live Real Data investigation; other topics remain '
-        'read-only pending source-specific validation.'
+        'Ask freely across sourced Group and segment financial figures. '
+        'For unsupported topics, Copilot explains what evidence is missing.'
         '</div>'
     )
     options=SEGMENT_TOPICS if s.business_line else GROUP_TOPICS
+    topic_names=["All reported metrics"]+[x for x in options if x!="All reported metrics"]
     topic=st.selectbox(
-        "Investigation area",list(options),key="real_copilot_evidence_topic"
+        "Investigation area",topic_names,key="real_copilot_evidence_topic"
     )
     try:
         evidence=build_reported_evidence(s,topic)
@@ -102,9 +103,8 @@ def render_reported_copilot(s):
             return
     else:
         st.info(
-            "AI interpretation is enabled only for reported Group CET1 in this "
-            "first integration step. You can review source values for this "
-            "topic, but no unsupported explanation is generated."
+            "The selected scope does not have approved AI evidence; "
+            "the published values remain available for review."
         )
 
     with st.expander("Inspect the complete reported evidence and source references"):
@@ -119,8 +119,8 @@ def render_reported_copilot(s):
             for m in evidence["metrics"]
         ],use_container_width=True,hide_index=True)
         st.caption(
-            "This is the data the first AI investigation uses. It does not "
-            "include the Synthetic cockpit, forecasts, or any Genie SQL results."
+            "These figures are from the official reporting extract. "
+            "No Synthetic values, unrestricted SQL or Genie data are included."
         )
     with st.expander("Inspect exact Real Data AI evidence payload"):
         st.code(json.dumps(evidence,ensure_ascii=False,indent=2),language="json")
