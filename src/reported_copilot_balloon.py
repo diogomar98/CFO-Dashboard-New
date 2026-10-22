@@ -20,15 +20,19 @@ from src.reported_copilot_partner import (
 BALLOON_CSS = """
 <style>
 /* Deliberately scoped: no visual or behavioural change in Synthetic mode. */
-.st-key-real_cfo_balloon_anchor {
+/* ABN runs a Streamlit version without st.container(key=...). The
+   balloon is the only native popover in the Real Data view, so style its
+   native wrapper directly instead of depending on keyed containers. */
+div[data-testid="stPopover"] {
     position:fixed !important;
-    bottom:22px;
-    right:24px;
+    bottom:22px !important;
+    right:24px !important;
     width:max-content !important;
     max-width:calc(100vw - 30px);
-    z-index:1000000;
+    z-index:1000000 !important;
 }
-.st-key-real_cfo_balloon_anchor [data-testid="stPopover"] button {
+div[data-testid="stPopover"] > button,
+div[data-testid="stPopover"] button {
     background:linear-gradient(110deg,#0C2716,#173A25) !important;
     border:1px solid #45C878 !important;
     box-shadow:0 8px 34px rgba(0,0,0,.52),0 0 14px rgba(45,190,96,.17);
@@ -54,7 +58,7 @@ div[data-testid="stPopoverBody"]:has(.real-cfo-panel-header) {
 .real-cfo-panel-sub {font-size:.67rem;color:#A6CAB1;line-height:1.45;}
 .real-cfo-visual-head {font-size:.71rem;font-weight:800;color:#B9DDC1;letter-spacing:.03em;}
 @media(max-width:650px){
-  .st-key-real_cfo_balloon_anchor {right:12px;bottom:12px;}
+  div[data-testid="stPopover"] {right:12px !important;bottom:12px !important;}
   div[data-testid="stPopoverBody"]:has(.real-cfo-panel-header) {
     width:calc(100vw - 24px) !important; max-height:75vh !important;
   }
@@ -87,50 +91,52 @@ def _popover_options():
 
 
 def _capital_bridge_chart(bridge):
-    """Arithmetic contributions in percentage points; no inferred causality."""
-    data=pd.DataFrame([
-        {"Effect":"CET1 capital","pp":bridge["capital_component_pp"],
-         "description":"Change in capital, holding prior RWA constant"},
-        {"Effect":"RWA denominator","pp":bridge["rwa_component_pp"],
-         "description":"Change in RWA, holding latest capital constant"},
+    """One compact source-derived contribution chart, designed for narrow chat.
+
+    Three bars: capital numerator contribution, RWA denominator contribution,
+    and reconciled net CET1 ratio movement. Short horizontal-axis labels
+    prevent category text collision in small Streamlit popovers.
+    """
+    source = pd.DataFrame([
+        {"Effect": "Capital", "pp": bridge["capital_component_pp"],
+         "description": "CET1 capital numerator, previous-quarter RWA held fixed"},
+        {"Effect": "RWA", "pp": bridge["rwa_component_pp"],
+         "description": "RWA denominator, latest-quarter CET1 capital held fixed"},
+        {"Effect": "Total", "pp": bridge["reported_delta_pp"],
+         "description": "Reported quarter-on-quarter CET1 ratio movement"},
     ])
-    plot=alt.Chart(data).mark_bar(size=26,cornerRadiusEnd=2).encode(
-        y=alt.Y("Effect:N",sort=["CET1 capital","RWA denominator"],title=None,
-                axis=alt.Axis(labelColor="#B7D7C1",labelFontSize=11,domain=False,ticks=False)),
-        x=alt.X("pp:Q",title="Contribution to ratio movement (pp)",
-                scale=alt.Scale(zero=True),
-                axis=alt.Axis(labelColor="#A5C2AF",titleColor="#A5C2AF",gridColor="#1B3724")),
-        color=alt.condition(alt.datum.pp>=0,alt.value("#31C975"),alt.value("#E7A366")),
+    order = ["Capital", "RWA", "Total"]
+    x = alt.X(
+        "Effect:N", sort=order, title=None,
+        axis=alt.Axis(labelColor="#B7D7C1", labelAngle=0,
+                      labelFontSize=11, domain=False, ticks=False),
+    )
+    y = alt.Y(
+        "pp:Q", title="CET1 change (pp)",
+        scale=alt.Scale(zero=True, nice=True),
+        axis=alt.Axis(labelColor="#A5C2AF", titleColor="#A5C2AF",
+                      gridColor="#1B3724", labelFontSize=10),
+    )
+    color = alt.Color(
+        "Effect:N",
+        scale=alt.Scale(domain=order, range=["#31C975", "#D4AA69", "#AE8AE9"]),
+        legend=None,
+    )
+    base = alt.Chart(source).encode(
+        x=x, y=y, color=color,
         tooltip=[
-            alt.Tooltip("Effect:N"),
-            alt.Tooltip("pp:Q",format="+.3f",title="Contribution (pp)"),
-            alt.Tooltip("description:N",title="Method"),
+            alt.Tooltip("Effect:N", title="Effect"),
+            alt.Tooltip("pp:Q", format="+.4f", title="Impact in pp"),
+            alt.Tooltip("description:N", title="Calculation"),
         ],
     )
-    return plot.properties(height=100).configure_view(strokeOpacity=0).configure(
-        background="#0C1710"
-    )
-
-
-def _quarter_comparison_chart(bridge):
-    """Historical ratio bars (not AI-produced chart points)."""
-    data=pd.DataFrame([
-        {"Quarter":bridge["previous_quarter"],"Ratio":bridge["previous_ratio_pct"]},
-        {"Quarter":bridge["latest_quarter"],"Ratio":bridge["latest_ratio_pct"]},
-    ])
-    return alt.Chart(data).mark_bar(size=46,cornerRadiusEnd=3).encode(
-        x=alt.X("Quarter:N",sort=[bridge["previous_quarter"],bridge["latest_quarter"]],
-                axis=alt.Axis(labelColor="#B6D5BE",title=None,domain=False)),
-        y=alt.Y("Ratio:Q",scale=alt.Scale(zero=True),title="CET1 (%)",
-                axis=alt.Axis(gridColor="#1D3324",labelColor="#A3C1AC",titleColor="#A3C1AC")),
-        color=alt.Color("Quarter:N",scale=alt.Scale(
-            domain=[bridge["previous_quarter"],bridge["latest_quarter"]],
-            range=["#376D4C","#32CA73"]),legend=None),
-        tooltip=[alt.Tooltip("Quarter:N"),
-                 alt.Tooltip("Ratio:Q",format=".3f",title="Reported CET1 (%)")],
-    ).properties(height=145).configure_view(strokeOpacity=0).configure(
-        background="#0C1710"
-    )
+    bars = base.mark_bar(size=45, cornerRadiusEnd=3)
+    labels = base.mark_text(
+        dy=-9, color="#DCEEE1", fontSize=11, fontWeight="bold"
+    ).encode(text=alt.Text("pp:Q", format="+.3f"))
+    return (bars + labels).properties(height=175).configure_view(
+        strokeOpacity=0
+    ).configure(background="#0C1710")
 
 
 def render_cet1_visuals(bridge, compact=True):
@@ -147,12 +153,8 @@ def render_cet1_visuals(bridge, compact=True):
             "Numerator-first arithmetic, not an explanation of underlying "
             "business causes. Values are from ABN AMRO Q2 2026 factsheet."
         )
-        st.markdown('<div class="real-cfo-visual-head">CET1 capital and RWA contributions</div>',
-                    unsafe_allow_html=True)
+        st.markdown("**CET1 ratio movement — capital / RWA / total (pp)**")
         st.altair_chart(_capital_bridge_chart(bridge),use_container_width=True)
-        st.markdown('<div class="real-cfo-visual-head">Reported quarterly CET1 ratio</div>',
-                    unsafe_allow_html=True)
-        st.altair_chart(_quarter_comparison_chart(bridge),use_container_width=True)
         st.caption(
             f"Capital €{bridge['previous_capital_eur_m']:,.1f}m → "
             f"€{bridge['latest_capital_eur_m']:,.1f}m; "
@@ -253,27 +255,27 @@ def render_floating_copilot(s):
     if not getattr(s,"is_reported",False):
         return
     render_html(BALLOON_CSS)
-    # st.container(key=...) produces an isolated CSS class, without changing
-    # Synthetic layout or copying the Gateway interface.
-    with st.container(key="real_cfo_balloon_anchor"):
-        with st.popover("✦ CFO Copilot",**_popover_options()):
-            render_html(
-                '<div class="real-cfo-panel-header">'
-                '<div class="real-cfo-panel-title">CFO Copilot</div>'
-                '<div class="real-cfo-panel-sub">'
-                'Live Group CET1 investigation · verified figures and follow-ups'
-                '</div></div>'
+    # Use the native Streamlit popover directly. The ABN-deployed version of
+    # st.container does not support the key= argument (confirmed traceback).
+    # Real-only CSS fixes this native popover in the viewport corner.
+    with st.popover("✦ CFO Copilot", **_popover_options()):
+        render_html(
+            '<div class="real-cfo-panel-header">'
+            '<div class="real-cfo-panel-title">CFO Copilot</div>'
+            '<div class="real-cfo-panel-sub">'
+            'Live Group CET1 investigation · verified figures and follow-ups'
+            '</div></div>'
+        )
+        if s.business_line:
+            st.info(
+                "Group CET1 investigation only. Select Group reporting "
+                "to use the live Copilot. Segment financial questions "
+                "are not connected yet."
             )
-            if s.business_line:
-                st.info(
-                    "Group CET1 investigation only. Select Group reporting "
-                    "to use the live Copilot. Segment financial questions "
-                    "are not connected yet."
-                )
-                return
-            try:
-                evidence=build_reported_evidence(s,"Capital")
-                render_cet1_chat(evidence,compact=True)
-            except ValueError:
-                st.error("Cannot verify the current CET1 figures; Copilot is unavailable.")
-                return
+            return
+        try:
+            evidence=build_reported_evidence(s,"Capital")
+            render_cet1_chat(evidence,compact=True)
+        except ValueError:
+            st.error("Cannot verify the current CET1 figures; Copilot is unavailable.")
+            return
