@@ -398,9 +398,10 @@ def render_reported_module(module, s):
         return
 
     if module == "scenario":
-        st.markdown("#### What-If Engine | reporting baseline")
-        st.write(f"Observed quarter-end loans: {_money(latest['loans_m'])}. Customer deposits: {_money(latest['deposits_m'])}.")
-        st.info("The original scenario engine requires synthetic loan/deposit repricing rates and betas. It is intentionally not run on the reported actuals; a labelled assumptions interface can be added in a later phase.")
+        # Real Group scenario uses ONLY the public 2021+ Group NII/NIM and ECB
+        # rates. Original src/modules/scenario.py stays untouched for Synthetic.
+        from src.reported_scenario import render_reported_scenario
+        render_reported_scenario(s)
         return
 
     if module == "copilot":
