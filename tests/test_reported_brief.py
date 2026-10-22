@@ -88,14 +88,14 @@ class ReportedBriefTests(unittest.TestCase):
 
     def test_real_morning_uses_official_feeds_with_original_news_card_style(self):
         code = Path("src/reported_brief.py").read_text(encoding="utf-8")
-        self.assertIn("from src.reported_news import recent_official_articles",code)
+        self.assertIn("from src.reported_news import (",code)
         self.assertIn("Saved official ECB headlines",code)
         self.assertIn("is-external rb-news-wide",code)
         self.assertIn("rb-news-grid",code)
-        self.assertIn("No synthetic items have been inserted",code)
-        self.assertIn("Live ECB access failed",code)
-        self.assertIn("Why it matters",code)
-        self.assertIn("Potential metric",code)
+        self.assertIn("Synthetic news has not been substituted",code)
+        self.assertIn("ABN cannot reach live ECB RSS",code)
+        self.assertIn("_official_article_card",code)
+        self.assertIn("Potential metric",Path("src/reported_brief.py").read_text("utf-8"))
         self.assertIn("Open News Intelligence",code)
         self.assertIn("src.reported_brief",
                       Path("src/real_data_mode.py").read_text(encoding="utf-8"))
@@ -140,6 +140,30 @@ class ReportedBriefTests(unittest.TestCase):
         self.assertIn("Prototype", rendered)
         row["source_url"] = "javascript:alert(1)"
         self.assertNotIn('href="javascript:', _prototype_article(row))
+
+    def test_official_news_uses_original_high_impact_colours_and_ai_confidence(self):
+        from src.reported_brief import _official_article_card
+        official={
+            "id":"ecb-one","headline":"ECB policy update","source":"ECB press releases",
+            "url":"https://www.ecb.europa.eu/press/pr/date/2026/html/a.en.html",
+            "published":"2026-10-16T10:00:00+00:00",
+            "summary":"Official rates update.","relevant_terms":["monetary policy"],
+        }
+        judgement={"relevance":"HIGH","metric":"Rates",
+                   "reason":"Policy rates can affect financial conditions.",
+                   "confidence":0.81}
+        coloured=_official_article_card(official,judgement,saved=True)
+        self.assertIn('status-impact-high',coloured)
+        self.assertIn('High relevance',coloured)
+        self.assertIn('conf-badge conf-high',coloured)
+        self.assertIn('Confidence · High 81%',coloured)
+        self.assertIn('Saved official ECB news',coloured)
+        self.assertIn('Policy rates can affect',coloured)
+        self.assertIn('https://www.ecb.europa.eu/',coloured)
+        unassessed=_official_article_card(official,{},saved=True)
+        self.assertIn('Unrated relevance',unassessed)
+        self.assertIn('Confidence · Not assessed',unassessed)
+        self.assertNotIn('Confidence · High',unassessed)
 
     def test_visible_headline_trends_and_expand_collapse_behavior(self):
         code = Path("src/reported_brief.py").read_text(encoding="utf-8")
