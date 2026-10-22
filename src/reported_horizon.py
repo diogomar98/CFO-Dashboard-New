@@ -153,70 +153,6 @@ def _forecast_chart(history, metric="nim_pct", history_points=12, bands="Both"):
     ).configure(background="#08100C")
 
 
-def _assumption_form():
-    """Only explicitly optional scenario inputs, never synthetic default growth."""
-    key="rh_public_scenario"
-    if key not in st.session_state:
-        st.session_state[key]={
-            "method":"Auto (lowest historical forecast error)",
-            "rate_shock_bps":0.0,"nim_overlay_bps":0.0,"nii_overlay_pct":0.0,
-        }
-    state=st.session_state[key]
-    with st.expander("Model assumptions · public history & scenario controls",expanded=False):
-        st.caption(
-            "Neutral baseline: 22 Group quarters + ECB effective-rate history. "
-            "Automatic model choice compares a simple no-change benchmark with a "
-            "two-driver, ridge-regularised lag model using rolling historical forecasts. "
-            "No forecast market rates, internal repricing betas, or loan yields are invented."
-        )
-        with st.form("rh_public_model_form"):
-            model=st.selectbox(
-                "Forecasting method",[
-                    "Auto (lowest historical forecast error)",
-                    "Rate-sensitive model (ARX)",
-                    "No-change benchmark",
-                ],index=[
-                    "Auto (lowest historical forecast error)",
-                    "Rate-sensitive model (ARX)",
-                    "No-change benchmark",
-                ].index(state["method"])
-            )
-            col1,col2=st.columns(2,gap="medium")
-            with col1:
-                rate=st.number_input(
-                    "Next-quarter ECB DFR shock (bps)",min_value=-100.0,max_value=100.0,
-                    value=float(state["rate_shock_bps"]),step=25.0,format="%.0f",
-                    help="Explicit hypothetical one-time change; the new ECB rate then stays flat.",
-                )
-                nim=st.number_input(
-                    "Additional NIM adjustment / quarter (bps)",
-                    min_value=-15.0,max_value=15.0,
-                    value=float(state["nim_overlay_bps"]),step=1.0,format="%.1f",
-                )
-            with col2:
-                nii=st.number_input(
-                    "Additional NII adjustment / quarter (%)",
-                    min_value=-7.0,max_value=7.0,
-                    value=float(state["nii_overlay_pct"]),step=.5,format="%.1f",
-                )
-                st.caption(
-                    "The DFR change affects the rate-sensitive model after one "
-                    "reporting-quarter lag. Under No-change, it has no direct forecast "
-                    "effect, since that benchmark has no ECB coefficient."
-                )
-            submitted=st.form_submit_button("Apply scenario",use_container_width=True)
-        if submitted:
-            state={"method":model,"rate_shock_bps":float(rate),
-                   "nim_overlay_bps":float(nim),"nii_overlay_pct":float(nii)}
-            st.session_state[key]=state
-        if st.button("Reset to neutral public baseline",key="rh_public_reset",
-                     use_container_width=True):
-            state={"method":"Auto (lowest historical forecast error)",
-                   "rate_shock_bps":0.0,"nim_overlay_bps":0.0,"nii_overlay_pct":0.0}
-            st.session_state[key]=state
-    return state
-
-
 def _lens(path,summary):
     """Preserve the Synthetic forward-lens layout with accountable methodology."""
     diag=summary["diagnostics"]
@@ -234,7 +170,6 @@ def _lens(path,summary):
         if pd.notna(full_year) else
         "Full-year NII cannot be calculated from the available reported periods."
     )
-    shock=summary["rate_shock_bps"]
     return f"""
     <div class="forward-lens-panel">
       <div class="forward-lens-kicker">Forward lens · public-data model</div>
@@ -262,12 +197,12 @@ def _lens(path,summary):
         interest-earning assets.</span>
       </div>
       <div class="forward-lens-row">
-        <span class="forward-lens-label">Rate assumption</span>
-        <span class="forward-lens-value">ECB DFR last reported:
-        <strong>{summary['last_ecb_qend_pct']:.2f}%</strong>. A
-        <strong>{shock:+.0f} bps</strong> user shock implies a flat
-        <strong>{summary['future_dfr_pct']:.2f}%</strong> next-quarter scenario.
-        This is not a market-implied forward rate.</span>
+        <span class="forward-lens-label">Rates context</span>
+        <span class="forward-lens-value">Last published ECB DFR:
+        <strong>{summary['last_ecb_qend_pct']:.2f}%</strong>.
+        The neutral forecast holds it flat from the Q2 2026 close.
+        This is a modelling convention, <strong>not</strong> an ECB forecast
+        or market-implied forward path.</span>
       </div>
       <div class="forward-lens-row">
         <span class="forward-lens-label">Year-end lens</span>
@@ -353,26 +288,17 @@ def render_reported_horizon(s):
         'forecast. Forecasts and prediction bands are estimates, not reported actuals '
         'or official management guidance.</div>'
     )
-    render_html('<div class="rh-pill">22 verified Group quarters · ECB rates · modelled 90% / 95% ranges</div>')
+    render_html('<div class="rh-pill">22 verified Group quarters · neutral baseline · modelled 90% / 95% ranges</div>')
     try:
         public=load_public_horizon_inputs(s.reported_group)
     except (FileNotFoundError,ValueError,KeyError) as exc:
         st.error("Source check failed: " + str(exc))
         st.caption("Do not substitute the Synthetic financial datasets.")
         return
-    assumptions=_assumption_form()
-    mapping={
-        "Auto (lowest historical forecast error)":"auto",
-        "Rate-sensitive model (ARX)":"rate_arx",
-        "No-change benchmark":"no_change",
-    }
+    # Horizon always displays the automatically selected, unshocked public
+    # baseline. ECB shocks and direct financial overlays belong in What-If.
     try:
-        trajectory,model=build_public_horizon(
-            public,model_preference=mapping[assumptions["method"]],
-            rate_shock_bps=assumptions["rate_shock_bps"],
-            nim_overlay_bps=assumptions["nim_overlay_bps"],
-            nii_overlay_pct=assumptions["nii_overlay_pct"],
-        )
+        trajectory,model=build_public_horizon(public,model_preference="auto")
     except (ValueError,OverflowError,ArithmeticError) as exc:
         st.error("Unable to calculate a source-grounded forecast: " + str(exc))
         return
@@ -387,14 +313,17 @@ def render_reported_horizon(s):
         ("Next-quarter NIM step",
          f"{model['first_nim_change_bps']:+.1f} bps",
          f"Modelled vs reported {model['last_quarter']}"),
-        ("ECB deposit facility rate",
-         f"{model['future_dfr_pct']:.2f}%",
-         f"Q2 close {model['last_ecb_qend_pct']:.2f}% · "
-         f"scenario {model['rate_shock_bps']:+.0f} bps"),
+        ("ECB DFR · Q2 actual",
+         f"{model['last_ecb_qend_pct']:.2f}%",
+         "Neutral forward-rate assumption: unchanged"),
     ]
     for col,(label,value,detail) in zip(st.columns(4),cards):
         with col:
             render_html(_card(label,value,detail))
+    st.caption(
+        "This view shows the neutral, automatically selected forecast. "
+        "For rate shocks or manual NIM/NII overlays, use the Real Data What-If Engine."
+    )
     st.write("")
     chart_col,lens_col=st.columns([1.72,.90],gap="large")
     with chart_col:
@@ -432,7 +361,7 @@ def render_reported_horizon(s):
             "Green = audited public Group NII/NIM actuals. Dashed purple = "
             "forecast. 90% / 95% bands reflect assumed Gaussian errors scaled "
             "from limited rolling tests, not bank-approved statistical confidence. "
-            "Future ECB policy rate held flat unless manually shocked."
+            "Horizon holds the ECB policy rate flat; rate scenarios belong in What-If."
         )
     with lens_col:
         render_html(_lens(trajectory,model))
@@ -440,7 +369,7 @@ def render_reported_horizon(s):
     render_html(
         '<div class="module-action-row">'
         f'<a class="module-action-link" href="{module_url("scenario")}" target="_self">'
-        'Continue to What-If (next stage) →</a>'
+        'Test ECB rates & management overlays in What-If →</a>'
         '<span class="rh-model-label">Public-model forecast · Real Data mode only</span>'
         '</div>'
     )
