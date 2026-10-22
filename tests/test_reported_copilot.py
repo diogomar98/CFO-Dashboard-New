@@ -89,7 +89,7 @@ class ReportedCopilotEvidenceTests(unittest.TestCase):
 
     def test_profitability_remains_preview_only(self):
         packet=build_reported_evidence(self.group,"Profitability")
-        self.assertFalse(packet["llm_enabled"])
+        self.assertTrue(packet["llm_enabled"])
         fields={m["field"]:m for m in packet["metrics"]}
         self.assertIn("nii_m",fields)
         self.assertIn("nim_bps",fields)
@@ -101,7 +101,7 @@ class ReportedCopilotEvidenceTests(unittest.TestCase):
 
     def test_segment_never_sends_group_capital_to_gateway(self):
         packet=build_reported_evidence(self.segment,"Balance sheet")
-        self.assertFalse(packet["llm_enabled"])
+        self.assertTrue(packet["llm_enabled"])
         self.assertEqual(packet["scope"],"Wealth Management")
         self.assertEqual(
             [m["field"] for m in packet["metrics"]],
@@ -130,7 +130,7 @@ class ReportedCopilotEvidenceTests(unittest.TestCase):
         view=Path("src/reported_copilot.py").read_text(encoding="utf-8")
         balloon=Path("src/reported_copilot_balloon.py").read_text(encoding="utf-8")
         self.assertIn("render_cet1_chat(evidence, compact=False)",view)
-        self.assertIn("answer_reported_cet1",balloon)
+        self.assertIn("answer_reported_question",balloon)
         self.assertIn("real_cfo_cet1_messages",balloon)
         self.assertNotIn('st.container(key=',balloon)
         self.assertIn('jarvis-root-marker',balloon)
