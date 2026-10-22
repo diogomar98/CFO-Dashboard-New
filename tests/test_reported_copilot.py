@@ -126,14 +126,16 @@ class ReportedCopilotEvidenceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,"inconsistent"):
             build_cet1_bridge(tampered)
 
-    def test_real_copilot_uses_separate_chat_and_no_genie(self):
+    def test_real_copilot_uses_shared_balloon_chat_and_no_genie(self):
         view=Path("src/reported_copilot.py").read_text(encoding="utf-8")
-        self.assertIn('key="real_cet1_chat"',view)
-        self.assertIn("answer_reported_cet1",view)
-        self.assertIn("real_cfo_cet1_messages",view)
-        self.assertIn("not used for this investigation",view)
-        self.assertNotIn("from src.modules.copilot",view)
-        self.assertNotIn("answer_data_question",view)
+        balloon=Path("src/reported_copilot_balloon.py").read_text(encoding="utf-8")
+        self.assertIn("render_cet1_chat(evidence, compact=False)",view)
+        self.assertIn("answer_reported_cet1",balloon)
+        self.assertIn("real_cfo_cet1_messages",balloon)
+        self.assertIn("key=\"real_cfo_balloon_anchor\"",balloon)
+        self.assertIn('st.popover("✦ CFO Copilot"',balloon)
+        self.assertNotIn("from src.modules.copilot",balloon)
+        self.assertNotIn("answer_data_question",balloon)
         partner=Path("src/reported_copilot_partner.py").read_text(encoding="utf-8")
         self.assertIn("from src.openai_partner import generate_prompt_response",partner)
         self.assertNotIn("genie_partner",partner)
