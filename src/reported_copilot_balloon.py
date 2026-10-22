@@ -4,6 +4,8 @@ A native Streamlit popover stays inside the active report dialog or home.
 It never sends chart instructions to the LLM: all diagrams are computed from
 the same two published Group capital/RWA reporting quarters.
 """
+import inspect
+
 import altair as alt
 import pandas as pd
 import streamlit as st
@@ -62,6 +64,26 @@ div[data-testid="stPopoverBody"]:has(.real-cfo-panel-header) {
 HISTORY_KEY = "real_cfo_cet1_messages"
 CONTEXT_KEY = "real_cfo_cet1_evidence_context"
 MAX_STORED_MESSAGES = 24
+
+
+def prepare_cet1_investigation(question=None):
+    """Queue a source-specific question from a Real Morning Brief KPI card.
+
+    Streamlit >=1.55 supports a keyed popover that can open programmatically.
+    Older versions retain the prepared text for the next manual balloon open.
+    """
+    st.session_state["real_cfo_question_compact"] = (
+        question or DEFAULT_QUESTION
+    )
+    st.session_state["real_cfo_popover_open"] = True
+
+
+def _popover_options():
+    settings = {"use_container_width": False}
+    options = inspect.signature(st.popover).parameters
+    if "key" in options and "on_change" in options:
+        settings.update(key="real_cfo_popover_open", on_change="rerun")
+    return settings
 
 
 def _capital_bridge_chart(bridge):
@@ -234,7 +256,7 @@ def render_floating_copilot(s):
     # st.container(key=...) produces an isolated CSS class, without changing
     # Synthetic layout or copying the Gateway interface.
     with st.container(key="real_cfo_balloon_anchor"):
-        with st.popover("✦ CFO Copilot",use_container_width=False):
+        with st.popover("✦ CFO Copilot",**_popover_options()):
             render_html(
                 '<div class="real-cfo-panel-header">'
                 '<div class="real-cfo-panel-title">CFO Copilot</div>'
