@@ -291,10 +291,6 @@ lenses = [
         "peers", "◌", "Peers", "Benchmarking pending",
         "Peer disclosures are a separate source", s.ratings["peer_roe"], None,
     ),
-    (
-        "strategy", "◎", "Opportunity", "Strategic radar pending",
-        "Assessment inputs not in factsheet", s.ratings["strategy_top"], None,
-    ),
 ] if is_real else [
     (
         "news", "◇", "News",
