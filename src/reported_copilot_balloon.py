@@ -140,11 +140,7 @@ MAX_STORED_MESSAGES = 24
 
 
 def prepare_cet1_investigation(question=None):
-    """Queue a source-specific question from a Real Morning Brief KPI card.
-
-    Streamlit >=1.55 supports a keyed popover that can open programmatically.
-    Older versions retain the prepared text for the next manual balloon open.
-    """
+    """Prepare the first Jarvis question and open the separate floating panel."""
     st.session_state["real_cfo_question_compact"] = (
         question or DEFAULT_QUESTION
     )
@@ -156,7 +152,7 @@ def _capital_bridge_chart(bridge):
 
     Three bars: capital numerator contribution, RWA denominator contribution,
     and reconciled net CET1 ratio movement. Short horizontal-axis labels
-    prevent category text collision in small Streamlit popovers.
+    prevent category text collision in small visual evidence panels.
     """
     source = pd.DataFrame([
         {"Effect": "Capital", "pp": bridge["capital_component_pp"],
@@ -258,8 +254,7 @@ def _send(question,evidence,history):
     ])
     if len(history)>MAX_STORED_MESSAGES:
         del history[:-MAX_STORED_MESSAGES]
-    # A rerun restores the entire thread, keeps the native popover open,
-    # and expands the deterministic evidence charts beside the latest answer.
+    # A rerun restores the shared thread; Jarvis remains open in session state.
     st.rerun()
 
 
