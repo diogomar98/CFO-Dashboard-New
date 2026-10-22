@@ -21,7 +21,7 @@ BALLOON_CSS = """
 <style>
 /* Jarvis is a SEPARATE Real Data assistant. The radial CFO Copilot is intact.
    Target only the innermost Streamlit block containing the Jarvis marker.
-   This does not require st.container(key=...), a feature unavailable at ABN. */
+   This does not require keyed Streamlit containers, unavailable at ABN. */
 div[data-testid="stVerticalBlock"]:has(.jarvis-root-marker):not(
   :has(div[data-testid="stVerticalBlock"] .jarvis-root-marker)
 ) {
