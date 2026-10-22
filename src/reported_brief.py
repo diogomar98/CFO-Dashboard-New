@@ -555,34 +555,61 @@ def _prototype_article(article):
 
 
 def _external_news():
+    """Use official public ECB sources, preserving the original wide news layout.
+
+    Source excerpts have not been checked for bank-specific economic impact.
+    News relevance is separately evaluated on the News Intelligence page.
+    """
+    from src.reported_news import recent_official_articles
     st.markdown("### External news & developments")
-    articles = load_existing_news()
-    if articles.empty:
-        content = (
-            '<div class="feed-empty">No original news records available. '
-            'Keep news_signals.csv and news_geo_impact.csv in the Databricks '
-            'data folder to enable the prototype feed.</div>'
+    articles, warnings = recent_official_articles()
+    cards=[]
+    for article in articles[:4]:
+        headline=html.escape(article["headline"])
+        summary=html.escape(article["summary"][:190])
+        source=html.escape(article["source"])
+        day=html.escape(article["published"][:10])
+        url=html.escape(article["url"],quote=True)
+        cards.append(
+            '<article class="feed-item rb-news-item">'
+            '<div class="feed-item-top">'
+            '<span class="feed-tag">ECB / public</span>'
+            f'<span class="feed-date">{day}</span>'
+            '<span class="feed-status status-impact-low">Unrated</span>'
+            '</div>'
+            f'<div class="feed-headline">{headline}</div>'
+            f'<div class="feed-detail">{summary}</div>'
+            '<div class="feed-detail"><strong>Potential metric</strong> '
+            'See News Intelligence for AI relevance classification</div>'
+            '<div class="feed-foot">'
+            '<span class="feed-source">Official public news · unverified bank impact</span>'
+            f'<a class="news-source-link" href="{url}" target="_blank" '
+            f'rel="noopener noreferrer">{source} ↗</a>'
+            '</div></article>'
         )
-        last_update = "News data unavailable"
+    if cards:
+        content='<div class="rb-news-grid">'+"".join(cards)+'</div>'
+        last_update=html.escape(articles[0]["published"][:10])
     else:
-        # Same four highest-relevance headlines shown in Synthetic Morning Brief.
-        content = '<div class="rb-news-grid">' + "".join(
-            _prototype_article(row) for _, row in articles.head(4).iterrows()
-        ) + '</div>'
-        last_update = "Latest sample " + articles["published_date"].max().strftime("%d %b %Y")
+        content=(
+            '<div class="feed-empty">Official ECB feeds unavailable. '
+            'No synthetic news records have been substituted. '
+            +html.escape("; ".join(warnings[:2]))+'</div>'
+        )
+        last_update="Official source unavailable"
     render_html(
         '<section class="feed-frame is-external rb-news-wide">'
         '<div class="feed-frame-head">'
         '<span class="feed-frame-title">External news</span>'
-        f'<span class="feed-frame-note">Original news CSVs · {html.escape(last_update)}</span>'
+        f'<span class="feed-frame-note">Official ECB RSS · {last_update}</span>'
         '</div>'
         '<div class="rb-news-clarifier">'
-        'Original prototype feed, including source links and impact/confidence '
-        'classifications. These classifications are <strong>illustrative</strong> '
-        'and are not verified against ABN AMRO reported financial actuals. '
-        'This feed does not refresh live.'
-        '</div>' + content + '</section>'
+        'Headlines are live public information and are not evidence of '
+        'causal impact on ABN financials. See News Intelligence for AI '
+        'relevance and an independently verified ECB-rate scenario.'
+        '</div>'+content+'</section>'
     )
+
 
 
 def render_reported_brief(s):
