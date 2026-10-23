@@ -143,6 +143,53 @@ def _genie_external_rows(response):
     return pd.concat(frames, ignore_index=True), "external_rows_retrieved"
 
 
+def _verified_query_rows(db, space_id, conversation_id, message_id, attachment_id):
+    """Recover already-executed Genie rows; never re-run Genie SQL.
+
+    SDK response deserialization varies: first decode inline/typed arrays,
+    then fall back to the authenticated SDK's raw API on an empty result.
+    """
+    from src.genie_partner import _fetch_query_result, _parse_rest_query_result
+    from src.reported_genie_rows import decode_genie_rows
+
+    def read_response(response):
+        frame, status = decode_genie_rows(response, max_rows=MAX_RETURNED_ROWS)
+        if status == "external_links_only":
+            return _genie_external_rows(response)
+        return frame, status
+
+    frame = pd.DataFrame()
+    status = "query_result_not_retrieved"
+    try:
+        response = _fetch_query_result(
+            db, space_id, conversation_id, message_id, attachment_id
+        )
+        frame, status = read_response(response)
+        if not frame.empty or status == "zero_query_rows":
+            return frame, status
+    except Exception as exc:
+        status = "sdk_result_failed_" + type(exc).__name__
+
+    # If the SDK discards data_typed_array or returns a shape we don't know,
+    # the same authorized WorkspaceClient can fetch unmodified response JSON.
+    client = getattr(db, "api_client", None)
+    if not callable(getattr(client, "do", None)):
+        return frame, status
+    path = (
+        f"/api/2.0/genie/spaces/{space_id}/conversations/{conversation_id}"
+        f"/messages/{message_id}/attachments/{attachment_id}/query-result"
+    )
+    try:
+        raw = client.do("GET", path)
+        response = (
+            _parse_rest_query_result(raw) if isinstance(raw, dict) else raw
+        )
+        return read_response(response)
+    except Exception as exc:
+        # Never expose raw URL/auth/SQL/data through the UI diagnostic.
+        return frame, "raw_result_failed_" + type(exc).__name__
+
+
 def ask_real_genie(question, *, conversation_id=None, scope=None,
                    space_id=None, client=None):
     """Query ONLY a configured Real Genie Space using existing ABN SDK auth.
@@ -170,7 +217,7 @@ def ask_real_genie(question, *, conversation_id=None, scope=None,
     # space ID nor its USE_MOCKS branch is ever accessed by this adapter.
     from src.genie_partner import (
         _extract_answer_text, _fetch_query_result,
-        _get_client, _msg_attr, _rows_to_dataframe,
+        _get_client, _msg_attr,
     )
     try:
         db=client if client is not None else _get_client()
@@ -195,52 +242,23 @@ def ask_real_genie(question, *, conversation_id=None, scope=None,
             query=getattr(attachment,"query",None)
             cid=_msg_attr(msg,"conversation_id")
             mid=_msg_attr(msg,"message_id","id")
-            # attachment_id is the attachment UUID, not the SQL statement_id.
             aid=(
                 _msg_attr(attachment,"attachment_id","id")
                 or _msg_attr(query,"id","attachment_id")
             )
             rows_status="missing_attachment_identifiers"
-            try:
-                if cid and mid and aid:
-                    # GenieMessage.query_result is DEPRECATED result metadata,
-                    # not actual SQL rows. Always fetch the statement_response
-                    # through the dedicated Genie attachment-result API.
-                    response=_fetch_query_result(
-                        db,configured_space,cid,mid,aid,
+            if cid and mid and aid:
+                frame,rows_status=_verified_query_rows(
+                    db,configured_space,cid,mid,aid,
+                )
+            else:
+                # Only an actual SQL statement response counts as evidence.
+                inline=getattr(msg,"query_result",None)
+                if inline is not None:
+                    from src.reported_genie_rows import decode_genie_rows
+                    frame,rows_status=decode_genie_rows(
+                        inline,max_rows=MAX_RETURNED_ROWS
                     )
-                    if getattr(response,"statement_response",None) is None:
-                        rows_status="missing_statement_response"
-                    else:
-                        frame=_rows_to_dataframe(response)
-                        if not frame.empty:
-                            rows_status="rows_retrieved"
-                        else:
-                            # Databricks Genie may return signed external links
-                            # rather than INLINE result.data_array values.
-                            statement=response.statement_response
-                            result_obj=getattr(statement,"result",None)
-                            if getattr(result_obj,"external_links",None):
-                                frame,rows_status=_genie_external_rows(response)
-                            else:
-                                rows_status="zero_query_rows"
-                else:
-                    # Some older SDKs may inline a full statement response.
-                    inline=getattr(msg,"query_result",None)
-                    if getattr(inline,"statement_response",None) is not None:
-                        frame=_rows_to_dataframe(inline)
-                        rows_status="rows_retrieved" if not frame.empty else "zero_query_rows"
-            except Exception as exc:
-                # Never expose pre-signed URLs, query results or credential
-                # values in the UI or logs. Only an exception class is shown.
-                rows_status=(
-                    "external_result_failed_" if 'response' in locals()
-                    and getattr(getattr(response,"statement_response",None),"result",None)
-                    is not None
-                    and getattr(response.statement_response.result,"external_links",None)
-                    else "query_fetch_failed_"
-                ) + type(exc).__name__
-                frame=pd.DataFrame()
         if len(frame)>MAX_RETURNED_ROWS:
             frame=frame.head(MAX_RETURNED_ROWS)
         return {
