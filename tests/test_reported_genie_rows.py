@@ -53,7 +53,7 @@ class GenieRowsTests(unittest.TestCase):
         }}
         rows,status=decode_genie_rows(content)
         self.assertEqual(status,"rows_retrieved")
-        self.assertIsNone(rows.iloc[1,0])
+        self.assertTrue(pd.isna(rows.iloc[1,0]))
         content["statement_response"]["result"]={}
         rows,status=decode_genie_rows(content)
         self.assertEqual(status,"unknown_result_format")
