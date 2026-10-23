@@ -59,6 +59,90 @@ def _extract_verified_sql(message):
     return sql,attachment
 
 
+def _genie_external_rows(response):
+    """Decode the short-lived EXTERNAL_LINKS result returned by Genie.
+
+    Download only the first chunks needed for the 50-row evidence cap. Signed
+    result URLs carry temporary credentials: never log, store or display them,
+    and NEVER send a Databricks Authorization header to the storage host.
+    """
+    import io
+    import json
+    from urllib.parse import urlsplit
+
+    statement = getattr(response, "statement_response", None)
+    result = getattr(statement, "result", None)
+    manifest = getattr(statement, "manifest", None)
+    links = getattr(result, "external_links", None) or []
+    if not links:
+        return pd.DataFrame(), "no_external_links"
+
+    schema = getattr(manifest, "schema", None)
+    columns = [
+        getattr(c, "name", f"col_{i}")
+        for i, c in enumerate(getattr(schema, "columns", None) or [])
+    ]
+    kind = getattr(manifest, "format", None)
+    kind = str(getattr(kind, "value", kind) or "").split(".")[-1].upper()
+    allowed_suffixes = (
+        ".blob.core.windows.net", ".dfs.core.windows.net",
+        ".amazonaws.com", ".storage.googleapis.com",
+    )
+    allowed_exact = {"storage.googleapis.com"}
+    frames = []
+    count = 0
+    # Limit the size of each downloaded result chunk and fail closed if the
+    # network returns an unexpected redirect or a non-cloud URL.
+    max_bytes = 8 * 1024 * 1024
+    for link in sorted(links, key=lambda l: getattr(l, "chunk_index", 0) or 0):
+        if count >= MAX_RETURNED_ROWS:
+            break
+        url = getattr(link, "external_link", None) or ""
+        location = urlsplit(url)
+        hostname = (location.hostname or "").lower()
+        if (
+            location.scheme != "https"
+            or not hostname
+            or not (
+                hostname in allowed_exact
+                or any(hostname.endswith(suffix) for suffix in allowed_suffixes)
+            )
+        ):
+            raise ValueError("Unapproved Genie external-result hostname")
+        import requests
+        with requests.get(
+            url, stream=True, timeout=(5, 20), allow_redirects=False
+        ) as download:
+            download.raise_for_status()
+            if download.is_redirect:
+                raise ValueError("Unexpected external-result redirect")
+            content = bytearray()
+            for portion in download.iter_content(chunk_size=65536):
+                content.extend(portion)
+                if len(content) > max_bytes:
+                    raise ValueError("Genie result chunk exceeds the download limit")
+        if kind == "ARROW_STREAM":
+            import pyarrow.ipc as ipc
+            frame = ipc.open_stream(io.BytesIO(content)).read_all().to_pandas()
+        elif kind == "CSV":
+            frame = pd.read_csv(io.BytesIO(content), nrows=MAX_RETURNED_ROWS)
+        elif kind == "JSON_ARRAY":
+            values = json.loads(content.decode("utf-8"))
+            if isinstance(values, dict):
+                values = values.get("data_array", [])
+            frame = pd.DataFrame(values, columns=columns or None)
+        else:
+            raise ValueError("Unsupported Genie external-result format")
+        if columns and len(columns) == len(frame.columns):
+            frame.columns = columns
+        frame = frame.head(MAX_RETURNED_ROWS - count)
+        frames.append(frame)
+        count += len(frame)
+    if not frames:
+        return pd.DataFrame(), "zero_query_rows"
+    return pd.concat(frames, ignore_index=True), "external_rows_retrieved"
+
+
 def ask_real_genie(question, *, conversation_id=None, scope=None,
                    space_id=None, client=None):
     """Query ONLY a configured Real Genie Space using existing ABN SDK auth.
@@ -129,7 +213,17 @@ def ask_real_genie(question, *, conversation_id=None, scope=None,
                         rows_status="missing_statement_response"
                     else:
                         frame=_rows_to_dataframe(response)
-                        rows_status="rows_retrieved" if not frame.empty else "zero_query_rows"
+                        if not frame.empty:
+                            rows_status="rows_retrieved"
+                        else:
+                            # Databricks Genie may return signed external links
+                            # rather than INLINE result.data_array values.
+                            statement=response.statement_response
+                            result_obj=getattr(statement,"result",None)
+                            if getattr(result_obj,"external_links",None):
+                                frame,rows_status=_genie_external_rows(response)
+                            else:
+                                rows_status="zero_query_rows"
                 else:
                     # Some older SDKs may inline a full statement response.
                     inline=getattr(msg,"query_result",None)
@@ -137,9 +231,15 @@ def ask_real_genie(question, *, conversation_id=None, scope=None,
                         frame=_rows_to_dataframe(inline)
                         rows_status="rows_retrieved" if not frame.empty else "zero_query_rows"
             except Exception as exc:
-                # Fail closed: never synthesize SQL data from Genie's prose.
-                # Export only a safe error CLASS for UI troubleshooting.
-                rows_status="query_fetch_failed_"+type(exc).__name__
+                # Never expose pre-signed URLs, query results or credential
+                # values in the UI or logs. Only an exception class is shown.
+                rows_status=(
+                    "external_result_failed_" if 'response' in locals()
+                    and getattr(getattr(response,"statement_response",None),"result",None)
+                    is not None
+                    and getattr(response.statement_response.result,"external_links",None)
+                    else "query_fetch_failed_"
+                ) + type(exc).__name__
                 frame=pd.DataFrame()
         if len(frame)>MAX_RETURNED_ROWS:
             frame=frame.head(MAX_RETURNED_ROWS)
@@ -230,6 +330,8 @@ def answer_real_genie_question(question, *, scope=None, conversation_id=None,
             if rows_status=="missing_statement_response" else
             "The app could not retrieve the result (missing query identifiers)."
             if rows_status=="missing_attachment_identifiers" else
+            "The app couldn't download the Genie external data chunk ("+rows_status+")."
+            if rows_status.startswith("external_result_failed_") else
             "The app could not retrieve the SQL result ("+rows_status+")."
         )
         answer=(
