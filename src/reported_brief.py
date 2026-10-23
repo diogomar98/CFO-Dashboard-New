@@ -552,7 +552,9 @@ def _prototype_article(article):
     official=val("news_origin")=="official"
     relevance_word="relevance" if official else "impact"
     summary_label=(
-        "AI relevance" if val("ai_assessed")=="yes" else "Official excerpt"
+        "Reviewed relevance" if val("relevance_origin")=="Editorial review"
+        else "AI relevance" if val("ai_assessed")=="yes"
+        else "Official excerpt"
     ) if official else ""
     summary_html=(
         f'<strong>{summary_label}</strong> {detail}'
@@ -566,6 +568,14 @@ def _prototype_article(article):
         'Inspect the official article and review available What-If assumptions.</div>'
         if official else ""
     )
+    segs=article.get("segments",[])
+    # The curated catalogue is source-validated; still escape display strings.
+    business_lines=(
+        '<div class="feed-detail"><strong>Potential business lines</strong> '
+        +html.escape(" · ".join(str(x) for x in segs))
+        +'</div>'
+        if official and isinstance(segs,list) and segs else ""
+    )
     return (
         '<article class="feed-item rb-news-item">'
         '<div class="feed-item-top">'
@@ -576,8 +586,8 @@ def _prototype_article(article):
         '</div>'
         f'<div class="feed-headline">{headline}</div>'
         f'<div class="feed-detail">{summary_html}</div>'
-        f'<div class="feed-detail"><strong>Potential metric</strong> {metric}</div>'
-        +followup+
+        f'<div class="feed-detail"><strong>Potential metric / theme</strong> {metric}</div>'
+        +business_lines+followup+
         '<div class="feed-foot">' + conf + source_link + '</div>'
         f'<div class="feed-detail">{origin_note}</div></article>'
     )
@@ -594,6 +604,8 @@ def _official_article_card(article, classification=None, *, saved=False):
     if relevance not in {"HIGH","MEDIUM","LOW"}:
         relevance="UNRATED"
     metric=classification.get("metric") or "Not assessed"
+    if metric=="Not assessed" and article.get("category"):
+        metric=article["category"]+" (theme)"
     terms=set(article.get("relevant_terms",[]))
     if metric=="Not assessed":
         if terms.intersection({"monetary policy","deposit facility","interest rate"}):
@@ -609,7 +621,10 @@ def _official_article_card(article, classification=None, *, saved=False):
     reasoning=classification.get("reason","").strip()
     return _prototype_article({
         "news_origin":"official",
-        "ai_assessed":"yes" if relevance!="UNRATED" else "no",
+        "ai_assessed":"yes" if classification.get("ai_agrees")
+                       or classification.get("relevance_origin")=="AI only" else "no",
+        "relevance_origin":classification.get("relevance_origin","Not assessed"),
+        "segments":article.get("segments",[]),
         "category":article.get("category","ECB")+( " · Saved" if saved else " · Live"),
         "headline":article["headline"],
         "source":article["source"],
