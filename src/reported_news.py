@@ -14,7 +14,7 @@ from src.public_scenario_engine import NEUTRAL_INPUTS
 from src.reported_news_partner import (
     DFR_URL, OFFICIAL_FEEDS, classify_headlines, fetch_ecb_articles,
     fetch_ecb_rate_events, verified_rate_scenario, load_official_news_snapshot,
-    load_curated_bank_news,
+    load_curated_bank_news, REPORTED_NEWS_SEGMENTS, RELEVANCE_LEVELS,
 )
 
 
@@ -52,20 +52,87 @@ def recent_official_articles(*, include_status=False):
     return ([],warnings,{"mode":"none","count":0}) if include_status else ([],warnings)
 
 
-def official_article_classifications(articles):
-    """Run the same existing corporate AI Gateway over locally saved articles.
+def _effective_news_assessment(article, model_result=None):
+    """Reviewed relevance governs curated selections; AI is optional context.
 
-    Uses only public title/excerpt, so ABN's blocked Internet does NOT block
-    the classification call. A Gateway error keeps scores unrated; no fabricated
-    relevance, confidence or financial effects are inserted.
+    Editorial relevance is based on short verified public news metadata.
+    Model confidence is only displayed if AI independently agrees with that
+    reviewed tier. Neither rating is a financial-impact probability.
+    """
+    ai=model_result if isinstance(model_result,dict) else {}
+    editorial=article.get("editorial_relevance")
+    if editorial in RELEVANCE_LEVELS:
+        agreed=ai.get("relevance")==editorial
+        return {
+            "id":article["id"],
+            "relevance":editorial,
+            "metric":ai.get("metric") if agreed else "Not assessed",
+            "reason":ai.get("reason") if agreed and ai.get("reason")
+                     else article.get("editorial_reason",""),
+            "confidence":ai.get("confidence") if agreed else None,
+            "relevance_origin":"Editorial review",
+            "ai_agrees":bool(agreed),
+        }
+    if ai.get("relevance") in RELEVANCE_LEVELS:
+        return dict(ai,relevance_origin="AI only")
+    return {"id":article["id"],"relevance":"UNRATED",
+            "reason":"","metric":"Not assessed","confidence":None,
+            "relevance_origin":"Not assessed"}
+
+
+def filter_financial_news(articles, assessments, relevance="All",
+                          segment="All segments"):
+    """AND-combined relevance and *exact* published-business-line filters."""
+    valid_filters=("All","High","Medium","Low","Not assessed")
+    if relevance not in valid_filters:
+        raise ValueError("Unknown relevance filter")
+    if segment!="All segments" and segment not in REPORTED_NEWS_SEGMENTS:
+        raise ValueError("Unknown reported segment")
+    wanted=relevance.upper()
+    filtered=[]
+    for article in articles:
+        assessment=assessments.get(article["id"],{})
+        current=assessment.get("relevance","UNRATED")
+        if wanted!="ALL" and (
+            current!=("UNRATED" if wanted=="NOT ASSESSED" else wanted)
+        ):
+            continue
+        if segment!="All segments" and segment not in article.get("segments",[]):
+            continue
+        filtered.append(article)
+    return filtered
+
+
+def official_article_classifications(articles):
+    """Use the existing AI Gateway, while keeping editorial filter stable.
+
+    The source catalogue has independently reviewed relevance tiers so every
+    source-linked article remains filterable if the corporate LLM is offline.
+    All article groups are classified (not just first eight). No internal ABN
+    data are sent: model receives only verified public titles/short excerpts.
     """
     if not articles:
         return {},None
-    try:
-        result=load_real_news_ai_classification(articles[:8])
-        return {item["id"]:item for item in result},None
-    except Exception:
-        return {},"AI Gateway returned no usable classification"
+    model={}
+    errors=0
+    for idx in range(0,len(articles),8):
+        batch=articles[idx:idx+8]
+        try:
+            rows=load_real_news_ai_classification(batch)
+            model.update({x["id"]:x for x in rows if x.get("id") in {
+                item["id"] for item in batch
+            }})
+        except Exception:
+            errors+=1
+    effective={
+        article["id"]:_effective_news_assessment(article,model.get(article["id"]))
+        for article in articles
+    }
+    return effective, (
+        "AI comments unavailable for part of the selection; editorial relevance "
+        "remains available." if errors else None
+    )
+
 
 
 def current_verified_ecb_change(reporting_frame, *, events=None, now=None):
@@ -153,29 +220,69 @@ def render_reported_news(s):
     c2.metric(
         "High relevance",
         sum(classified.get(a["id"],{}).get("relevance")=="HIGH"
-            for a in articles) if classified else "Not assessed",
+            for a in articles),
     )
     c3.metric("Publishers",len({a["source"].split(" · ")[0] for a in articles}))
     note="Verified publisher links · saved selection as of "+status.get(
         "retrieved_at_utc","unknown")[:10]+". Not a live feed."
     st.caption(note)
     if ai_error:
-        st.caption("AI relevance was unavailable; article confidence remains Not assessed.")
+        st.caption("AI commentary was partly unavailable; reviewed relevance and segment filters still work.")
     if warnings:
         st.caption("Source note: "+"; ".join(warnings[:2]))
+    # Relevance is a reviewed, three-level editorial assessment for the
+    # offline selection. A model may add explanation/uncalibrated confidence,
+    # but cannot silently redefine the reviewer's published filter tier.
+    with st.expander("How is relevance defined?", expanded=False):
+        st.markdown(
+            "**High** — Direct possible strategic, regulatory, capital, risk or "
+            "control implications for ABN or a reported business line.\\n\\n"
+            "**Medium** — Plausible but indirect financial, operational or "
+            "sector connection.\\n\\n"
+            "**Low** — Background, broad sector trends or sponsored themes "
+            "without a specific immediate decision implication."
+        )
+        st.caption(
+            "Reviewed from linked headlines and short summaries, not full "
+            "publisher articles. Business-line tags indicate possible relevance, "
+            "not proven exposure. Optional AI confidence is an uncalibrated "
+            "agreement assessment—not a probability of actual bank impact."
+        )
+    filter_left,filter_right=st.columns(2,gap="medium")
+    with filter_left:
+        selected_relevance=st.selectbox(
+            "Relevance",
+            ["All","High","Medium","Low","Not assessed"],
+            key="rn_filter_relevance",
+        )
+    with filter_right:
+        selected_segment=st.selectbox(
+            "Business segment",
+            ["All segments"]+list(REPORTED_NEWS_SEGMENTS),
+            key="rn_filter_segment",
+        )
+    visible=filter_financial_news(
+        articles,classified,relevance=selected_relevance,
+        segment=selected_segment,
+    )
+    st.caption(f"Showing {len(visible)} of {len(articles)} articles · "
+               "relevance and segment filters are combined")
     feed,aside=st.columns([1.8,1],gap="large")
     with feed:
         st.markdown("#### Recent developments")
         # One controlled div owns the scrollbar; compatible with older
         # Streamlit (st.container(height=) is unavailable in ABN).
-        card_html="".join(
-            '<div class="rb-news-grid">'+_card(
-                article,classified.get(article["id"],{}),saved=True,
-            )+'</div>'
-            for article in articles
-        )
-        render_html('<section class="rn-news-scroll" aria-label="Scrollable financial news">'
-                    +card_html+'</section>')
+        if not visible:
+            st.info("No articles match those filters. Select All relevance or All segments.")
+        else:
+            card_html="".join(
+                '<div class="rb-news-grid">'+_card(
+                    article,classified.get(article["id"],{}),saved=True,
+                )+'</div>'
+                for article in visible
+            )
+            render_html('<section class="rn-news-scroll" aria-label="Scrollable financial news">'
+                        +card_html+'</section>')
     with aside:
         st.markdown("#### From news to What-If")
         st.write(
