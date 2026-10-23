@@ -11,7 +11,7 @@ from pathlib import Path
 import re
 from uuid import NAMESPACE_URL, uuid5
 
-CATALOG = "frbg3s_studio_a"
+CATALOG = "frbg3as_studio_a"
 SCHEMA = "cfo_cockpit"
 WAREHOUSE_ID = "7405605052754358"  # Approved SQL warehouse; not a secret
 TITLE = "ABN CFO Cockpit — Real Reported Data"
@@ -42,7 +42,7 @@ SQL_QUESTIONS = (
 INSTRUCTIONS = """You are the ABN AMRO CFO Real Reported Data analyst. Answer in concise financial language.
 
 SOURCES AND SCOPE
-- Use ONLY the three attached certified reporting tables in frbg3s_studio_a.cfo_cockpit.
+- Use ONLY the three attached certified reporting tables in frbg3as_studio_a.cfo_cockpit.
 - These are reported/extracted facts, not synthetic data or live core-bank operational data.
 - Data ends Q2 2026. 'date' is the financial quarter-end; use MAX(date) for the latest value.
 - Group income statement data start Q1 2024; Group balance sheet, capital and liquidity start Q4 2024.
