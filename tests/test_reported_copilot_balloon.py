@@ -151,12 +151,12 @@ class FloatingCopilotTests(unittest.TestCase):
         self.assertEqual(active[0]["id"],"recent")
         with patch("src.reported_copilot_balloon.st.session_state",{}) as store:
             packet=build_reported_evidence(self.state,"All reported metrics")
-            first=_create_thread(packet,now=249_000)
+            first=_create_thread(packet)
             self.assertEqual(store[ACTIVE_KEY],first["id"])
             history=_get_thread(packet)
             history.append({"role":"user","content":"What is net profit?"})
             self.assertEqual(len(store[THREADS_KEY][0]["messages"]),1)
-            second=_create_thread(packet,now=249_600)
+            second=_create_thread(packet)
             self.assertNotEqual(first["id"],second["id"])
             self.assertEqual(store[ACTIVE_KEY],second["id"])
             # Reopening the first conversation restores its actual messages.
