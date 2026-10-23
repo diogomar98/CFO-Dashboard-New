@@ -12,7 +12,23 @@ The project already contains **exact, audited CSV extracts**. No invented source
 | `cfo_segment_quarterly` | `data/abn_segments_quarterly.csv` | Q4 2024–Q2 2026 | 28 (4 lines × 7 quarters) |
 | `cfo_group_nii_nim_2021` | `data/abn_group_nii_nim_2021_public.csv` | Q1 2021–Q2 2026 | 22 |
 
-Open a Databricks **Python notebook** with permission to create governed Unity Catalog tables. Make the three CSVs accessible to that notebook in an approved workspace path or UC Volume. Run the content of `setup/real_genie_uc_setup.py` with actual values for these three environment variables: `REAL_GENIE_CATALOG` (your UC catalog), `REAL_GENIE_SCHEMA` (your UC schema), `REAL_GENIE_SOURCE_DIR` (an accessible directory containing those exact three filenames).
+Open a Databricks **Python notebook** with permission to create governed Unity Catalog tables. Make the three CSVs accessible to that notebook in an approved workspace path or UC Volume, and use an **existing** catalog and schema for which you are explicitly authorized to create reporting tables. The simplest notebook cell, after the project files are accessible, is:
+
+```python
+import sys
+sys.path.insert(0, "/Workspace/Users/YOUR_USER/CFO-Dashboard-New")
+from setup.real_genie_uc_setup import prepare_source_tables
+
+summary = prepare_source_tables(
+    spark,
+    catalog="YOUR_APPROVED_CATALOG",
+    schema="YOUR_APPROVED_SCHEMA",
+    source_dir="/Workspace/Users/YOUR_USER/CFO-Dashboard-New/data",
+)
+print(summary)
+```
+
+Replace these **example paths and placeholders** with the actual Databricks workspace, catalog and schema paths. If your CSVs are in an approved UC Volume, point `source_dir` to the correct `/Volumes/catalog/schema/volume/folder` path instead. If you run `setup/real_genie_uc_setup.py` as a standalone script, the equivalent configuration can be passed through `REAL_GENIE_CATALOG`, `REAL_GENIE_SCHEMA` and `REAL_GENIE_SOURCE_DIR` environment variables. The script does **not** create or grant access to a new catalog/schema on your behalf.
 
 The script checks **exact column order, dates, row counts, business-line keys and public historical source URLs**, writes explicit nullable floating-point metric types, adds table/column comments and refuses to overwrite an existing table. The reporting data are stored *inside your ABN workspace*; GitHub contains the already-uploaded financial extracts but no credentials.
 
