@@ -123,6 +123,88 @@ class RealGenieIsolationTests(unittest.TestCase):
         self.assertTrue(all(c["data_mode"]=="real" for c in (initial,followup,scoped)))
         self.assertNotIn("Synthetic",initial["answer_text"])
 
+    def test_real_genie_fetches_rows_even_with_deprecated_query_result_metadata(self):
+        calls=[]
+        response_rows=pd.DataFrame([
+            {"date":"2026-06-30","net_profit_m":781.0}
+        ])
+        attachment=SimpleNamespace(
+            attachment_id="attachment-1",
+            query=SimpleNamespace(
+                query="SELECT date, net_profit_m FROM cfo_group_quarterly",
+                statement_id="statement-not-attachment-id",
+            ),
+        )
+        # The message.query_result is deprecated row-count metadata, not rows.
+        message=SimpleNamespace(
+            status="COMPLETED", content="Net profit reported.",
+            attachments=[attachment], query_result=SimpleNamespace(row_count=1),
+            conversation_id="conv-1", message_id="message-1",
+        )
+        class Genie:
+            def start_conversation_and_wait(self, **kwargs):
+                calls.append(("start",kwargs))
+                return message
+        def fetch(*args):
+            calls.append(("fetch",args))
+            return SimpleNamespace(statement_response=SimpleNamespace(
+                result=SimpleNamespace(data_array=[["2026-06-30","781"]]),
+            ))
+        fake_sdk=SimpleNamespace(
+            _extract_answer_text=lambda obj:obj.content,
+            _extract_query_attachment=lambda obj:obj.attachments[0],
+            _fetch_query_result=fetch,
+            _get_client=lambda:None,
+            _msg_attr=lambda obj,*names:next(
+                (getattr(obj,n) for n in names if getattr(obj,n,None)),None
+            ),
+            _rows_to_dataframe=lambda obj:response_rows,
+        )
+        with patch.dict(sys.modules,{"src.genie_partner":fake_sdk}):
+            result=ask_real_genie(
+                "Q2 2026 Group net profit?",space_id="real-space",
+                client=SimpleNamespace(genie=Genie()),
+            )
+        self.assertEqual(result["query_rows_status"],"rows_retrieved")
+        self.assertTrue(result["has_rows"])
+        self.assertEqual(len(result["data"]),1)
+        self.assertEqual(calls[1][0],"fetch")
+        self.assertEqual(calls[1][1][1:],(
+            "real-space","conv-1","message-1","attachment-1",
+        ))
+
+    def test_real_genie_explains_fetch_failure_without_fake_evidence(self):
+        attachment=SimpleNamespace(
+            attachment_id="attachment-1",
+            query=SimpleNamespace(query="SELECT net_profit_m FROM t"),
+        )
+        message=SimpleNamespace(
+            status="COMPLETED",content="Genie said EUR 100m.",
+            attachments=[attachment],conversation_id="conv-1",
+            message_id="message-1",
+        )
+        class Genie:
+            def start_conversation_and_wait(self,**kwargs):
+                return message
+        fake_sdk=SimpleNamespace(
+            _extract_answer_text=lambda obj:obj.content,
+            _extract_query_attachment=lambda obj:obj.attachments[0],
+            _fetch_query_result=lambda *a,**kw:(_ for _ in ()).throw(PermissionError()),
+            _get_client=lambda:None,
+            _msg_attr=lambda obj,*names:next(
+                (getattr(obj,n) for n in names if getattr(obj,n,None)),None
+            ),
+            _rows_to_dataframe=lambda obj:pd.DataFrame([{"x":1}]),
+        )
+        with patch.dict(sys.modules,{"src.genie_partner":fake_sdk}):
+            result=ask_real_genie(
+                "Net profit?",space_id="real-space",
+                client=SimpleNamespace(genie=Genie()),
+            )
+        self.assertEqual(result["query_rows_status"],"query_fetch_failed_PermissionError")
+        self.assertFalse(result["has_rows"])
+        self.assertTrue(result["data"].empty)
+
     def test_no_rows_never_manufactures_an_answer(self):
         generated=[]
         def fake_ask(question,**kwargs):
