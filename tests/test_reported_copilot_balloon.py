@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from src.real_data_mode import build_reported_state
+from src.realcdatacmode import build_reported_state
 from src.reported_copilot_evidence import build_reported_evidence
 from src.reported_copilot_partner import (
     DEFAULT_QUESTION, build_cet1_bridge, build_real_capital_prompt,
