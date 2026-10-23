@@ -610,7 +610,7 @@ def _official_article_card(article, classification=None, *, saved=False):
     return _prototype_article({
         "news_origin":"official",
         "ai_assessed":"yes" if relevance!="UNRATED" else "no",
-        "category":"ECB · Saved" if saved else "ECB · Live",
+        "category":article.get("category","ECB")+( " · Saved" if saved else " · Live"),
         "headline":article["headline"],
         "source":article["source"],
         "published_date":article["published"],
@@ -628,8 +628,9 @@ def _official_article_card(article, classification=None, *, saved=False):
             "probability of a real financial impact."
         ),
         "source_note":(
-            "Saved official ECB news; historical snapshot, NOT live."
-            if saved else "Live ECB RSS headline; bank impact unverified."
+            "Verified publisher link; saved editorial selection, NOT live. "
+            "Relevance is a model interpretation, not measured bank impact."
+            if saved else "Official ECB source; bank impact unverified."
         ),
     })
 
@@ -667,16 +668,15 @@ def _external_news():
         last_update="Unavailable"
     if saved:
         note=(
-            "Saved official ECB headlines retrieved on "
-            +html.escape(status["retrieved_at_utc"][:16].replace("T"," "))
-            +" UTC. ABN cannot reach live ECB RSS. These articles can be "
-            "ranked by the AI Gateway, but are NOT current monitoring."
+            "Multi-publisher financial news reviewed and saved on "
+            +html.escape(status.get("retrieved_at_utc","")[:10])
+            +". Not a live feed. Relevance and any confidence "
+            "are model judgments, not measured bank impacts."
         )
     else:
         note=(
-            "Official ECB RSS headlines. Relevance and confidence come "
-            "from the AI Gateway, when available; they are subjective "
-            "classifications, NOT validated impacts on ABN financials."
+            "Publisher-linked news. Model relevance assessments do not "
+            "establish financial causality."
         )
     if model_status:
         note+=" AI ranking unavailable; confidence is shown as Not assessed."
