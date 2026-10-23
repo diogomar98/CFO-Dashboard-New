@@ -84,8 +84,8 @@ def ask_real_genie(question, *, conversation_id=None, scope=None,
         _extract_answer_text, _fetch_query_result,
         _get_client, _msg_attr, _rows_to_dataframe,
     )
-    db=client if client is not None else _get_client()
     try:
+        db=client if client is not None else _get_client()
         if conversation_id:
             msg=db.genie.create_message_and_wait(
                 space_id=configured_space,conversation_id=conversation_id,
@@ -164,7 +164,9 @@ def answer_real_genie_question(question, *, scope=None, conversation_id=None,
     if has_rows:
         from src.openai_partner import generate_prompt_response
         import json
-        records=data.head(MAX_RETURNED_ROWS).where(pd.notna(data),None).to_dict(
+        records=data.head(MAX_RETURNED_ROWS).astype(object).where(
+            pd.notna(data.head(MAX_RETURNED_ROWS)),None,
+        ).to_dict(
             orient="records"
         )
         evidence={
