@@ -149,7 +149,7 @@ def _verified_query_rows(db, space_id, conversation_id, message_id, attachment_i
     SDK response deserialization varies: first decode inline/typed arrays,
     then fall back to the authenticated SDK's raw API on an empty result.
     """
-    from src.genie_partner import _fetch_query_result, _parse_rest_query_result
+    from src.genie_partner import _fetch_query_result
     from src.reported_genie_rows import decode_genie_rows
 
     def read_response(response):
@@ -181,6 +181,7 @@ def _verified_query_rows(db, space_id, conversation_id, message_id, attachment_i
     )
     try:
         raw = client.do("GET", path)
+        from src.genie_partner import _parse_rest_query_result
         response = (
             _parse_rest_query_result(raw) if isinstance(raw, dict) else raw
         )
