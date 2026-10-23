@@ -4,7 +4,7 @@
 # Open as a Databricks Python notebook and click Run All ONCE.
 # This publishes or verifies the 3 reporting tables and creates/reuses
 # the separately governed Real Genie Agent using preconfigured settings:
-# Catalog/schema: frbg3s_studio_a.cfo_cockpit
+# Catalog/schema: frbg3as_studio_a.cfo_cockpit
 # SQL warehouse: 7405605052754358
 # No widgets, SQL editing, credentials or manual copy/paste of SQL examples.
 #
