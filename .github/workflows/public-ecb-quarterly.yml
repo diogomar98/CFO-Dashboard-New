@@ -1,0 +1,33 @@
+name: Public ECB DFR quarterly evidence
+
+on:
+  pull_request:
+    paths:
+      - "research/build_ecb_dfr_quarters.py"
+      - ".github/workflows/public-ecb-quarterly.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  derive-rates:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install official ECB API client
+        run: python -m pip install requests
+      - name: Derive reproducible effective-rate quarterly averages
+        run: python research/build_ecb_dfr_quarters.py
+      - name: Preserve raw ECB API CSV and quarterly reconciliation
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ecb-official-dfr-quarterly
+          path: research/ecb_dfr_evidence/
+          retention-days: 30
+          if-no-files-found: warn
