@@ -40,7 +40,7 @@
 **Important:** No Databricks workspace API access is available from GitHub itself,
 so running the notebook and adding the approved App resource still happen on
 the ABN laptop. No warehouse ID, token or private account information should be
-committed to GitHub. This setup does not replace the Synthentic agent or data.
+committed to GitHub. This setup does not replace the Synthetic agent or data.
 
 **If the Python notebook refuses to import the project:** open it directly
 from the Git-backed repository folder (not a standalone copy). The notebook
