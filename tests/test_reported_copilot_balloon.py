@@ -134,6 +134,47 @@ class FloatingCopilotTests(unittest.TestCase):
         self.assertIn('metric == "cet1_ratio_pct"',brief)
         self.assertIn("prepare_cet1_investigation()",brief)
 
+    def test_conversation_library_ttl_and_scope_separation(self):
+        from src.reported_copilot_balloon import (
+            _valid_threads,_create_thread,_get_thread,_new_conversation,
+            THREAD_TTL_SECONDS,THREADS_KEY,ACTIVE_KEY,
+        )
+        self.assertEqual(THREAD_TTL_SECONDS,36*3600)
+        current=[
+            {"id":"recent","messages":[{"role":"user","content":"CET1?"}],
+             "title":"CET1?","updated_at":250_000,"signature":("group",)},
+            {"id":"stale","messages":[],"title":"Old",
+             "updated_at":250_000-36*3600,"signature":("group",)},
+        ]
+        active=_valid_threads(current,250_000)
+        self.assertEqual(len(active),1)
+        self.assertEqual(active[0]["id"],"recent")
+        with patch("src.reported_copilot_balloon.st.session_state",{}) as store:
+            packet=build_reported_evidence(self.state,"All reported metrics")
+            first=_create_thread(packet,now=249_000)
+            self.assertEqual(store[ACTIVE_KEY],first["id"])
+            history=_get_thread(packet)
+            history.append({"role":"user","content":"What is net profit?"})
+            self.assertEqual(len(store[THREADS_KEY][0]["messages"]),1)
+            second=_create_thread(packet,now=249_600)
+            self.assertNotEqual(first["id"],second["id"])
+            self.assertEqual(store[ACTIVE_KEY],second["id"])
+            # Reopening the first conversation restores its actual messages.
+            from src.reported_copilot_balloon import _switch_thread
+            self.assertTrue(_switch_thread(packet,first["id"]))
+            self.assertEqual(_get_thread(packet)[0]["content"],"What is net profit?")
+
+    def test_primary_chat_fields_and_avatars_are_explicit(self):
+        view=Path("src/reported_copilot_balloon.py").read_text("utf-8")
+        self.assertIn("Your question to CFO Copilot",view)
+        self.assertIn("Ask Jarvis · type your question",view)
+        self.assertIn('avatar="🤖"',view)
+        self.assertIn('else "🧑‍💼"',view)
+        self.assertIn("Conversation history · 36h",view)
+        self.assertIn("THREAD_TTL_SECONDS = 36 * 60 * 60",view)
+        self.assertIn("right:clamp(-480px",view)
+        self.assertNotIn('if st.button("New conversation",key="jarvis_reset"',view)
+
     def test_no_sensitive_code_or_source_csv_changes(self):
         self.assertTrue(Path("src/openai_partner.py").exists())
         self.assertTrue(Path("src/modules/copilot.py").exists())
