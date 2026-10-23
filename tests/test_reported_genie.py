@@ -187,7 +187,9 @@ class RealGenieIsolationTests(unittest.TestCase):
             "cfo_segment_quarterly",root
         ).columns)
         src=Path("setup/real_genie_uc_setup.py").read_text("utf-8")
-        self.assertIn('mode("errorifexists")',src)
+        self.assertIn('source.write.saveAsTable(target)', src)
+        self.assertIn('spark.catalog.tableExists', src)
+        self.assertNotIn('mode("errorifexists")', src)
         self.assertNotIn('mode("overwrite")',src)
         guide=Path("setup/real_genie_agent_guide.md").read_text("utf-8")
         queries=Path("setup/real_genie_trusted_queries.sql").read_text("utf-8")
