@@ -14,6 +14,7 @@ from src.public_scenario_engine import NEUTRAL_INPUTS
 from src.reported_news_partner import (
     DFR_URL, OFFICIAL_FEEDS, classify_headlines, fetch_ecb_articles,
     fetch_ecb_rate_events, verified_rate_scenario, load_official_news_snapshot,
+    load_curated_bank_news,
 )
 
 
@@ -33,25 +34,22 @@ def load_verified_ecb_rate_events():
 
 
 def recent_official_articles(*, include_status=False):
-    """Official live RSS first, timestamped *real* ECB snapshot if blocked.
+    """Offline curated publisher selection. No ECB fetch from the ABN App.
 
-    This is never a Synthetic feed. The source mode must be visible in the UI
-    so saved headlines cannot be mistaken for live monitoring.
+    Retain historical name for backwards compatibility with Morning Brief.
+    News is reviewed and saved on a given date, NOT automatically live.
     """
-    live, warnings = load_real_public_news()
-    if live:
-        mode = {"mode":"live","retrieved_at_utc":None,"count":len(live)}
-        return (live,warnings,mode) if include_status else (live,warnings)
-    saved,meta=load_official_news_snapshot()
+    bank_news, status=load_curated_bank_news()
+    if bank_news:
+        warnings=[]
+        return (bank_news,warnings,status) if include_status else (bank_news,warnings)
+    saved, old_status=load_official_news_snapshot()
     if saved:
-        warnings=list(warnings)+[
-            "Live ECB feeds unavailable: displaying a point-in-time official snapshot, "
-            "not current monitoring"
-        ]
-        return (saved,warnings,meta) if include_status else (saved,warnings)
-    warnings=list(warnings)+[meta.get("error","No official-source news available")]
-    mode={"mode":"none","retrieved_at_utc":None,"count":0}
-    return ([],warnings,mode) if include_status else ([],warnings)
+        old_status["source"]="Archived official ECB headlines"
+        warning=["Multi-publisher selection missing; only older ECB snapshot is available"]
+        return (saved,warning,old_status) if include_status else (saved,warning)
+    warnings=["No approved offline news sources installed"]
+    return ([],warnings,{"mode":"none","count":0}) if include_status else ([],warnings)
 
 
 def official_article_classifications(articles):
@@ -121,149 +119,79 @@ def _card(article, classification, *, saved=False):
 
 
 
+NEWS_SCROLL_CSS = """
+<style>
+/* Single bounded source list: never extend the News dialog to 12 screens. */
+.rn-news-scroll {
+    max-height:min(590px,69vh);
+    overflow-y:auto;
+    overflow-x:hidden;
+    padding:0 .85rem 0 0;
+    scrollbar-width:thin;
+    scrollbar-color:#46694f #102018;
+}
+.rn-news-scroll .rb-news-grid {display:block;}
+.rn-news-scroll .rb-news-item {padding:14px 12px 14px 8px !important;}
+.rn-subtle {font-size:.72rem;color:#A1BBA8;line-height:1.45;}
+</style>
+"""
+
+
 def render_reported_news(s):
-    render_html(BRIEF_CSS)
-    st.markdown("### News Intelligence · verified public sources")
-    st.caption(
-        "Official ECB news articles are read from the live feed or saved "
-        "point-in-time source snapshot. The existing corporate AI Gateway "
-        "can rank and assess the relevance of locally stored headlines. "
-        "Neither confidence nor relevance establishes a bank impact."
-    )
-    report=load_public_horizon_inputs(s.reported_group)
-    if st.button("↻ Retry live ECB connection",key="rn_retry_official_feeds"):
-        load_real_public_news.clear()
-        load_verified_ecb_rate_events.clear()
-        st.rerun()
-    fresh,warnings,status=recent_official_articles(include_status=True)
-    if status["mode"]=="snapshot":
-        st.warning(
-            "Live ECB news is unavailable from this Databricks environment. "
-            "Displaying **real ECB articles saved on "
-            +status["retrieved_at_utc"][:16].replace("T"," ")+" UTC**. "
-            "This is a dated snapshot, not up-to-date monitoring."
-        )
-    elif status["mode"]=="none":
-        st.error("Neither the official ECB feeds nor the verified backup snapshot is available.")
-    else:
-        st.caption("News source status: live official ECB RSS feed.")
-    if warnings:
-        with st.expander("News connection diagnostics",expanded=status["mode"]!="live"):
-            for warning in warnings:
-                st.write("• "+warning)
-            st.caption(
-                "If this shows outbound HTTPS, proxy or TLS failures, request "
-                "Databricks Apps egress approval for the official ECB RSS hosts. "
-                "Do not disable TLS verification or upload credentials."
-            )
-    with st.spinner("Ranking official news with the existing AI Gateway…"):
-        by_status,ai_error=official_article_classifications(fresh)
-    if ai_error:
-        st.warning(
-            "The AI Gateway could not classify the locally available articles. "
-            "Official news remains visible, but relevance and confidence "
-            "are not assessed."
-        )
-    for warning in warnings:
-        st.caption("Source status: "+warning)
-
-    actionable_count=sum(
-        1 for article in fresh
-        if by_status.get(article["id"],{}).get("relevance")=="HIGH"
-    )
+    """Source-linked offline financial news and existing AI relevance, concise UI."""
+    render_html(BRIEF_CSS+NEWS_SCROLL_CSS)
+    st.markdown("### Financial News Intelligence")
+    articles,warnings,status=recent_official_articles(include_status=True)
+    if not articles:
+        st.warning("No verified news catalogue is installed. Check data/abn_news_curated.json.")
+        return
+    from src.hud import navigate_to_module
+    with st.spinner("Ranking verified headlines with Jarvis AI…"):
+        classified,ai_error=official_article_classifications(articles)
     c1,c2,c3=st.columns(3)
-    c1.metric(
-        "Official headlines ("+("Live" if status["mode"]=="live" else "Saved" if status["mode"]=="snapshot" else "None")+")",
-        str(len(fresh)),
+    c1.metric("Curated articles",len(articles))
+    c2.metric(
+        "High relevance",
+        sum(classified.get(a["id"],{}).get("relevance")=="HIGH"
+            for a in articles) if classified else "Not assessed",
     )
-    c2.metric("AI high relevance",str(actionable_count) if by_status else "Unavailable")
-    c3.metric("Rate-stress support","ECB DFR only")
-    st.caption(
-        "Sources: "+", ".join(x[0] for x in OFFICIAL_FEEDS)
-        +". Feed summaries are not the same as complete articles. "
-        "No user or bank-specific financial data are transmitted to the news classifier."
-    )
-    try:
-        rate_events=load_verified_ecb_rate_events()
-        official_change=current_verified_ecb_change(report,events=rate_events)
-    except Exception:
-        rate_events=None
-        official_change=None
-        st.caption(
-            "ECB rate API request failed independently of the headlines. "
-            "Scenario prefill is disabled until the official ECB rate API "
-            "can be reached; saved headlines are never numerical shock evidence."
-        )
-    feed_col,scenario_col=st.columns([1.4,1],gap="large")
-    with feed_col:
+    c3.metric("Publishers",len({a["source"].split(" · ")[0] for a in articles}))
+    note="Verified publisher links · saved selection as of "+status.get(
+        "retrieved_at_utc","unknown")[:10]+". Not a live feed."
+    st.caption(note)
+    if ai_error:
+        st.caption("AI relevance was unavailable; article confidence remains Not assessed.")
+    if warnings:
+        st.caption("Source note: "+"; ".join(warnings[:2]))
+    feed,aside=st.columns([1.8,1],gap="large")
+    with feed:
         st.markdown("#### Recent developments")
-        if not fresh:
-            st.info("No official ECB headlines are currently available. Nothing synthetic is shown.")
-        for article in fresh[:10]:
-            render_html('<div class="rb-news-grid">'+_card(
-                article,by_status.get(article["id"],{}),
-                saved=status["mode"]=="snapshot",
-            )+'</div>')
-            if rate_events is not None:
-                reviewed=verified_rate_scenario(
-                    article,rate_events,
-                    reported_dfr=float(report.iloc[-1]["dfr_qend_pct"]),
-                )
-                if reviewed and st.button(
-                    f"Review verified ECB rate move ({reviewed['rate_shock_bps']:+d} bps) ↗",
-                    key="rn_event_"+article["id"],use_container_width=True,
-                ):
-                    _queue_rate_scenario(reviewed)
-
-    with scenario_col:
-        st.markdown("#### From public news to What-If")
-        st.caption(
-            "The only supported Real Data news lever is the ECB deposit "
-            "facility rate. Other AI-detected topics remain watchlist items "
-            "until a validated financial scenario model exists."
+        # One controlled div owns the scrollbar; compatible with older
+        # Streamlit (st.container(height=) is unavailable in ABN).
+        card_html="".join(
+            '<div class="rb-news-grid">'+_card(
+                article,classified.get(article["id"],{}),saved=True,
+            )+'</div>'
+            for article in articles
         )
-        if rate_events is None:
-            st.warning(
-                "Official ECB rate verification is unavailable. "
-                "No rate scenario can be prepared."
-            )
-        if official_change is None:
-            st.info(
-                "No new, independently verified ECB rate change within "
-                "the model's ±100 bps scenario range was found after Q2 2026."
-            )
-        else:
-            change=official_change["rate_shock_bps"]
-            st.metric("Observed DFR change vs Q2 2026",f"{change:+d} bps")
-            st.write(
-                f"Q2 2026: **{official_change['q2_2026_dfr_pct']:.2f}%** → "
-                f"latest verified: **{official_change['latest_ecb_dfr_pct']:.2f}%**"
-            )
-            st.caption(
-                "ECB rate effective from "
-                +official_change["rate_effective_date"]
-                +". This is a historical rate update to the Q2-cutoff "
-                "model—not a forecast, and not proof of ABN NII/NIM impact."
-            )
-            st.markdown(
-                "[Inspect official ECB rate observations]("
-                +official_change["official_data_url"]+")"
-            )
-            if st.button(
-                f"Review {change:+d} bps scenario in What-If →",
-                use_container_width=True,key="rn_news_to_whatif"
-            ):
-                _queue_rate_scenario(official_change)
-        st.divider()
-        st.markdown("#### What AI is doing")
+        render_html('<section class="rn-news-scroll" aria-label="Scrollable financial news">'
+                    +card_html+'</section>')
+    with aside:
+        st.markdown("#### From news to What-If")
         st.write(
-            "1. Monitor a fixed set of official feeds.\n"
-            "2. Classify relevance using public headlines and excerpts.\n"
-            "3. Independently check rate observations against the ECB API.\n"
-            "4. Prepare, but never silently execute, a scenario."
+            "News informs potential financial drivers. The Real Data model "
+            "currently supports rate-related NII/NIM scenarios."
         )
         st.caption(
-            "Live retrieval is cached for 30 minutes while in use. A saved "
-            "snapshot is historical, not monitored. Continuous unattended "
-            "monitoring needs an approved Databricks Job."
+            "No stress amount is inferred from press coverage. "
+            "Apply your own explicit assumptions in What-If; it uses "
+            "the validated reported-series forecast model."
+        )
+        if st.button("Open What-If →",key="rn_manual_scenario",use_container_width=True):
+            navigate_to_module("scenario")
+        st.markdown("#### Source coverage")
+        st.caption(
+            "Bloomberg, Financial Times, Yahoo Finance, FD partner content "
+            "and Dutch banking coverage. Some sources may require subscriptions. "
+            "The FD partner item is sponsored, not independent reporting."
         )
