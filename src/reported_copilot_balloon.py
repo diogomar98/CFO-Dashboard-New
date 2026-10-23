@@ -478,11 +478,17 @@ def _genie_provenance(item):
                 "typed_result_parse_failed":"The API returned typed SQL cells that could not be parsed safely.",
                 "external_links_only":"SQL results are available through an external link, not inline.",
                 "result_column_count_mismatch":"Genie returned a row that does not match the reported SQL column schema.",
+                "sql_statement_api_unavailable":"The SQL Statement Execution API is unavailable in this app's Databricks SDK.",
+                "sql_statement_pending":"The Genie SQL statement is still running; try a new conversation after it completes.",
+                "sql_statement_closed":"The SQL statement result has already closed or expired.",
+                "sql_statement_failed":"The SQL statement reported a failed execution.",
+                "sql_statement_canceled":"The SQL statement was cancelled.",
             }
             explanation=reasons.get(status)
             if explanation is None and status.startswith((
                 "query_fetch_failed_", "sdk_result_failed_",
-                "raw_result_failed_", "external_result_failed_"
+                "raw_result_failed_", "external_result_failed_",
+                "sql_statement_fetch_failed_"
             )):
                 explanation=(
                     "The Genie API SQL-result retrieval failed. "
