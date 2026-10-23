@@ -5,6 +5,8 @@ with a distinct scrolling message body and an ordinary composer footer.
 All CET1 evidence charts are derived locally from verified quarterly actuals.
 """
 import inspect
+import time
+from uuid import uuid4
 
 import altair as alt
 import pandas as pd
@@ -26,9 +28,11 @@ div[data-testid="stVerticalBlock"]:has(.jarvis-root-marker):not(
   :has(div[data-testid="stVerticalBlock"] .jarvis-root-marker)
 ) {
     position:fixed !important;
-    bottom:20px !important;
-    right:24px !important;
-    z-index:1000000 !important;
+    bottom:12px !important;
+    /* Dialog windows use a transformed, centred containing block on ABN.
+       Account for that offset so Jarvis reaches the VIEWPORT right edge. */
+    right:clamp(-480px,calc((100% - 100vw)/2 + 16px),16px) !important;
+    z-index:2147483000 !important;
     width:min(560px,calc(100vw - 24px)) !important;
     max-width:min(560px,calc(100vw - 24px)) !important;
     background:linear-gradient(160deg,#102118,#07120C) !important;
@@ -41,7 +45,7 @@ div[data-testid="stVerticalBlock"]:has(.jarvis-root-marker):not(
 div[data-testid="stVerticalBlock"]:has(.jarvis-root-marker):not(
   :has(div[data-testid="stVerticalBlock"] .jarvis-root-marker)
 ):has(.jarvis-open-marker) {
-    height:min(800px,calc(100dvh - 24px)) !important;
+    height:min(730px,calc(100dvh - 24px)) !important;
     max-height:calc(100dvh - 24px) !important;
     overflow-y:auto !important;
     overflow-x:hidden !important;
@@ -79,7 +83,7 @@ div[data-testid="stVerticalBlock"]:has(.jarvis-closed-marker):not(
 div[data-testid="stVerticalBlockBorderWrapper"]:has(.jarvis-history-marker):not(
   :has(div[data-testid="stVerticalBlockBorderWrapper"] .jarvis-history-marker)
 ) {
-    max-height:calc(min(800px,100dvh - 24px) - 250px) !important;
+    max-height:calc(min(730px,100dvh - 24px) - 240px) !important;
     min-height:0 !important;
     overflow-y:auto !important;
     flex:1 1 auto !important;
@@ -94,8 +98,8 @@ div[data-testid="stVerticalBlock"]:has(.jarvis-history-marker):not(
     overflow-y:auto !important;
     overscroll-behavior:contain;
     min-height:160px !important;
-    height:min(520px,calc(100dvh - 280px)) !important;
-    max-height:min(520px,calc(100dvh - 280px)) !important;
+    height:min(460px,calc(100dvh - 270px)) !important;
+    max-height:min(460px,calc(100dvh - 270px)) !important;
     flex:1 1 auto !important;
     padding:8px !important;
     background:rgba(2,10,6,.65) !important;
@@ -139,6 +143,16 @@ div[data-testid="stVerticalBlock"]:has(.jarvis-root-marker):not(
     z-index:3;
     flex-shrink:0 !important;
 }
+/* Modern chat avatars, without image assets or native Streamlit theme changes. */
+div[data-testid="stChatMessageAvatarAssistant"],
+div[data-testid="stChatMessageAvatarUser"],
+[data-testid="stChatMessage"] [data-testid="stChatMessageAvatar"] {
+    border-radius:13px !important;
+    background:linear-gradient(145deg,#153d29,#0d211a) !important;
+    border:1px solid rgba(88,198,123,.52) !important;
+    box-shadow:0 2px 14px rgba(28,166,84,.16);
+}
+.jarvis-toolbar-label {font-size:.66rem;color:#A4C6AF;letter-spacing:.05em;}
 /* Streamlit dialogs can create an opaque backdrop; Jarvis lives inside
    the active Real Data dialog and is therefore interactive above it. */
 @media (max-width:650px) {
@@ -154,7 +168,96 @@ div[data-testid="stVerticalBlock"]:has(.jarvis-root-marker):not(
 """
 HISTORY_KEY = "real_cfo_cet1_messages"
 CONTEXT_KEY = "real_cfo_cet1_evidence_context"
+THREADS_KEY = "real_cfo_chat_threads_36h"
+ACTIVE_KEY = "real_cfo_active_thread"
+THREAD_TTL_SECONDS = 36 * 60 * 60
+MAX_CONVERSATIONS = 12
 MAX_STORED_MESSAGES = 24
+
+
+def _valid_threads(threads, now):
+    """Pure TTL pruning; last activity refreshes a conversation's expiry."""
+    keep = []
+    for thread in threads if isinstance(threads, list) else []:
+        if not isinstance(thread, dict):
+            continue
+        if not isinstance(thread.get("id"),str) or not isinstance(thread.get("messages"),list):
+            continue
+        touched = thread.get("updated_at")
+        if not isinstance(touched,(int,float)) or not 0 <= now-touched < THREAD_TTL_SECONDS:
+            continue
+        keep.append(thread)
+    return sorted(keep,key=lambda x:x["updated_at"],reverse=True)[:MAX_CONVERSATIONS]
+
+
+def _create_thread(evidence, *, now=None):
+    """Create a source-scoped, temporary thread; cannot cross ABN users."""
+    now=time.time() if now is None else now
+    signature=_scope_signature(evidence)
+    thread={
+        "id":uuid4().hex,
+        "title":"New financial question",
+        "created_at":now,
+        "updated_at":now,
+        "signature":signature,
+        "messages":[],
+    }
+    current=_valid_threads(st.session_state.get(THREADS_KEY,[]),now)
+    st.session_state[THREADS_KEY]=[thread]+current[:MAX_CONVERSATIONS-1]
+    st.session_state[ACTIVE_KEY]=thread["id"]
+    st.session_state[CONTEXT_KEY]=signature
+    st.session_state[HISTORY_KEY]=thread["messages"]
+    return thread
+
+
+def _scope_signature(evidence):
+    return (evidence["scope"],evidence["as_of"],evidence["source"],evidence["topic"])
+
+
+def _available_threads(evidence, *, now=None):
+    now=time.time() if now is None else now
+    stored=_valid_threads(st.session_state.get(THREADS_KEY,[]),now)
+    st.session_state[THREADS_KEY]=stored
+    return [thread for thread in stored if tuple(thread.get("signature",()))==_scope_signature(evidence)]
+
+
+def _switch_thread(evidence, thread_id):
+    options=_available_threads(evidence)
+    selected=next((t for t in options if t["id"]==thread_id),None)
+    if selected is None:
+        return False
+    st.session_state[ACTIVE_KEY]=selected["id"]
+    st.session_state[HISTORY_KEY]=selected["messages"]
+    st.session_state[CONTEXT_KEY]=_scope_signature(evidence)
+    return True
+
+
+def _conversation_picker(evidence, *, compact=False):
+    """Shared Jarvis/Copilot selector; conversations survive view navigation."""
+    threads=_available_threads(evidence)
+    if not threads:
+        return
+    active=st.session_state.get(ACTIVE_KEY)
+    ids=[thread["id"] for thread in threads]
+    labels={t["id"]:t["title"] for t in threads}
+    key="jarvis_history_select" if compact else "real_cfo_history_select"
+    # Widget keys are synced before rendering to avoid stale previous choices.
+    if st.session_state.get(key) not in ids:
+        st.session_state[key]=active if active in ids else ids[0]
+    chosen=st.selectbox(
+        "Conversation history · expires 36h after last message",
+        ids,index=ids.index(st.session_state[key]),
+        format_func=lambda tid: labels.get(tid,"Conversation"),
+        key=key,
+    )
+    if chosen!=active and _switch_thread(evidence,chosen):
+        st.rerun()
+
+
+def _new_conversation(evidence):
+    _create_thread(evidence)
+    st.session_state.pop("jarvis_composer_text",None)
+    st.rerun()
 
 
 def prepare_cet1_investigation(question=None):
@@ -240,12 +343,16 @@ def render_cet1_visuals(bridge, compact=True):
 
 
 def _get_thread(evidence):
-    """One thread across all Real Data pages, reset for different source scope."""
-    signature=(evidence["scope"],evidence["as_of"],evidence["source"],evidence["topic"])
-    if st.session_state.get(CONTEXT_KEY)!=signature:
-        st.session_state[CONTEXT_KEY]=signature
-        st.session_state[HISTORY_KEY]=[]
-    return st.session_state[HISTORY_KEY]
+    """Use the selected conversation; TTL retained only in this Streamlit session."""
+    options=_available_threads(evidence)
+    active=st.session_state.get(ACTIVE_KEY)
+    current=next((t for t in options if t["id"]==active),None)
+    if current is None:
+        current=options[0] if options else _create_thread(evidence)
+        st.session_state[ACTIVE_KEY]=current["id"]
+    st.session_state[CONTEXT_KEY]=_scope_signature(evidence)
+    st.session_state[HISTORY_KEY]=current["messages"]
+    return current["messages"]
 
 
 def _send(question,evidence,history):
@@ -272,6 +379,14 @@ def _send(question,evidence,history):
     ])
     if len(history)>MAX_STORED_MESSAGES:
         del history[:-MAX_STORED_MESSAGES]
+    now=time.time()
+    active=st.session_state.get(ACTIVE_KEY)
+    for thread in st.session_state.get(THREADS_KEY,[]):
+        if thread["id"]==active:
+            thread["updated_at"]=now
+            if thread["title"]=="New financial question":
+                thread["title"]=question[:46]+("…" if len(question)>46 else "")
+            break
     # A rerun restores the shared thread; Jarvis remains open in session state.
     st.rerun()
 
@@ -289,18 +404,18 @@ def render_cet1_chat(evidence, *, compact=True):
         clear=st.button("New conversation",key="real_cfo_clear_"+str(compact),
                         use_container_width=True)
     if clear:
-        history.clear()
-        st.rerun()
+        _new_conversation(evidence)
+    _conversation_picker(evidence,compact=False)
     # The dedicated central view previously placed the composer over replies.
     # A marked, max-height scroll container keeps all replies fully accessible
     # even in the ABN runtime without st.container(height=).
     with st.container():
         render_html('<span class="cfo-thread-history-marker" aria-hidden="true"></span>')
         if not history:
-            st.info("Ask the CFO Copilot a question about the reported data.")
+            st.info("Your conversation will appear here. Type your **first question in the box below**.")
         visible=history[-16:]
         for index,item in enumerate(visible):
-            with st.chat_message(item["role"]):
+            with st.chat_message(item["role"], avatar="🤖" if item["role"]=="assistant" else "🧑‍💼"):
                 st.markdown(item["content"])
                 if item["role"]=="assistant":
                     st.caption("Model interpretation · factsheet figures are authoritative")
@@ -309,8 +424,8 @@ def render_cet1_chat(evidence, *, compact=True):
     st.divider()
     with st.form("real_cfo_chat_form_"+str(compact),clear_on_submit=True):
         question=st.text_area(
-            "Ask a follow-up",
-            placeholder="Ask about NII, CET1, liquidity, profitability or trends…",
+            "Your question to CFO Copilot",
+            placeholder="Type your FIRST question or a follow-up here…",
             max_chars=1200,height=78,
             key="real_cfo_question_"+str(compact),
         )
@@ -387,13 +502,13 @@ def _render_jarvis_conversation(evidence):
     with st.container():
         render_html('<span class="jarvis-history-marker" aria-hidden="true"></span>')
         if not history:
-            st.info("Ask Jarvis about any reported financial metric or business line.")
+            st.info("Type your first question in **Ask Jarvis** below; answers will appear here.")
             if st.button("Investigate Q2 CET1",key="jarvis_first_investigation",
                          use_container_width=True):
                 _send(DEFAULT_QUESTION,evidence,history)
         visible=history[-16:]
         for index,item in enumerate(visible):
-            with st.chat_message(item["role"]):
+            with st.chat_message(item["role"], avatar="🤖" if item["role"]=="assistant" else "🧑‍💼"):
                 st.markdown(item["content"])
                 if item["role"]=="assistant":
                     st.caption("AI interpretation · reported evidence only")
@@ -403,8 +518,8 @@ def _render_jarvis_conversation(evidence):
     # Separate normal-flow form after bounded chat. It does not cover messages.
     with st.form("jarvis_composer_form",clear_on_submit=True):
         question=st.text_area(
-            "Ask Jarvis a follow-up",
-            placeholder="E.g. Why did NIM change from 2022 to 2023?",
+            "Ask Jarvis · type your question",
+            placeholder="Ask your first question, e.g. Why did NIM change in 2023?",
             key="jarvis_composer_text",max_chars=1200,height=78,
         )
         asked=st.form_submit_button("Send to Jarvis →",use_container_width=True)
@@ -432,24 +547,31 @@ def render_floating_copilot(s):
             return
 
         render_html('<span class="jarvis-open-marker" aria-hidden="true"></span>')
-        head,actions=st.columns([5,1],gap="small")
+        head,add,actions=st.columns([5,1,1],gap="small")
         with head:
             render_html(
-                '<div class="jarvis-heading">✦ Jarvis</div>'
+                '<div class="jarvis-heading">🤖 Jarvis</div>'
                 '<div class="jarvis-subtitle">ABN CFO Assistant · Real Data</div>'
             )
+        with add:
+            new=st.button("＋",key="jarvis_reset",help="New conversation")
         with actions:
             if st.button("✕",key="jarvis_close",help="Close Jarvis"):
                 st.session_state["jarvis_open"]=False
                 st.rerun()
 
-        if st.button("New conversation",key="jarvis_reset",use_container_width=True):
-            st.session_state[HISTORY_KEY]=[]
-            st.session_state["jarvis_composer_text"]=""
-            st.rerun()
-
         try:
             evidence=build_reported_evidence(s,"All reported metrics")
+            _get_thread(evidence)
+            if new:
+                _new_conversation(evidence)
+            with st.expander("🕘 Conversation history · 36h",expanded=False):
+                _conversation_picker(evidence,compact=True)
+                st.caption(
+                    "History is kept for up to 36 hours while this Streamlit "
+                    "session is active. Closing the browser or app restart "
+                    "may clear it; no shared database is used."
+                )
             _render_jarvis_conversation(evidence)
         except (ValueError,FileNotFoundError):
             st.error("Reported financial evidence is unavailable; Jarvis cannot answer.")
