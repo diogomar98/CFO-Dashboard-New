@@ -330,3 +330,16 @@ The AI processes the **locally stored public ECB headline/excerpt**, so this can
 - Synthetic mode, radial central Copilot, existing gateway token/client, financial CSVs, Genie and model calculations unchanged.
 
 **Databricks updates on top of Stage 6.3:** replace `src/reported_copilot_balloon.py`, `src/reported_news_partner.py`, `src/reported_news.py`, `src/reported_brief.py`, and `main.py`. **Add `data/abn_news_curated.json`.** No external network access is required to populate the news selection. Verify chat placement, history picker, first question, the 590px list scroll, and a Morning Brief card before CFO demonstration.
+
+## Stage 6.5 — News relevance + ABN business-line filters (23 October 2026)
+
+The **Real Data News** view now exposes two independent, AND-combined `st.selectbox` filters above the existing scrollable article list: **Relevance** (All, High, Medium, Low, Not assessed) and **Business segment** (All segments, Personal & Business Banking, Wealth Management, Corporate Banking, Group Functions). Those four names match the uploaded `data/abn_segments_quarterly.csv` business_line values exactly. Group Functions is a reported scope and is **not** automatically treated as every other business line. Each Real news card also shows its potential business-line tags; the counter reports matching items out of total.
+
+The dashboard's saved `data/abn_news_curated.json` now gives each checked publisher article a *reviewed editorial* relevance tier, concise reason and one or more *potentially affected* reported business lines. The transparent, non-numerical rubric is:
+- **High:** a directly decision-relevant possible bank/segment strategic change, material regulation/capital/risk or control action.
+- **Medium:** a plausible but indirect financial, business, operating, sector or competitive connection without demonstrated direct impact.
+- **Low:** thematic background, sponsored sector content or older generic strategy/interview information.
+
+The existing AI Gateway receives the same rubric, operates on up to eight public excerpts per call, and now classifies the **entire** current curated selection in batches rather than stopping at eight articles. On the reviewed catalogue, **editorial relevance sets the stable filter tier**; agreeing model judgments may enhance the reason and provide **uncalibrated, subjective** relevance confidence. A disagreeing or unavailable AI response cannot silently overturn the editor's published tier or invent confidence. On older official ECB archival items with no editorial triage, validated AI relevance can be used, otherwise the article is Not assessed. A segment tag means **possible relevance**, not that ABN reported a segment financial impact. No financial model assumptions are constructed from news classifications.
+
+Deployment over Stage 6.4: **REPLACE** `src/reported_news_partner.py`, `src/reported_news.py`, `src/reported_brief.py` and `data/abn_news_curated.json`. Other UI files, Synthetic, Genie, news internet access, the existing corporate AI Gateway client and financial data are untouched. CI includes relevance-filter and combination regressions. Visual verification in the ABN Streamlit runtime remains required.
