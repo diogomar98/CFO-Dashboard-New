@@ -1,52 +1,69 @@
-# ABN Real Genie — no-code deployment (configured 23 October 2026)
+# ABN Real Genie — no-code deployment (preconfigured 23 October 2026)
 
-**Your approved Unity Catalog location is already entered in the code:**
-`frbg3s_studio_a.cfo_cockpit`.
+The complete approved ABN target is already built into the source code:
 
-**Fastest route in the ABN Databricks workspace**
+| Setting | Preconfigured value |
+|---|---|
+| Unity Catalog | `frbg3s_studio_a` |
+| Schema | `cfo_cockpit` |
+| SQL warehouse ID | `7405605052754358` |
+| Real Genie Agent name | `ABN CFO Cockpit — Real Reported Data` |
+| Synthetic Genie | **Unchanged** |
 
-1. Sync or copy the current feature branch into your Databricks Git folder. The files
-   `setup/ABN_REAL_GENIE_SETUP.py`, `setup/real_genie_auto.py`, `setup/real_genie_uc_setup.py`,
-   `setup/real_genie_trusted_queries.sql` and the three `data/abn*.csv` files must be alongside each other
-   in the normal project structure.
-2. Open `setup/ABN_REAL_GENIE_SETUP.py` **as a Python notebook**, attach approved
-   Databricks compute, and click **Run All**. No edit of code or handwritten SQL.
-   It creates exactly three Unity Catalog reporting tables (10 + 28 + 22 records),
-   or checks existing tables against all values in their source CSVs.
-3. Open **SQL Warehouses**, select the ABN-approved Pro or Serverless warehouse,
-   copy its **warehouse ID**. In the notebook's `sql_warehouse_id` widget
-   paste the ID and click **Run All** again. The SDK will create
-   **ABN CFO Cockpit — Real Reported Data**, with the three fully qualified
-   table sources, the financial instructions, five common questions and ten
-   reviewed read-only SQL examples. On subsequent runs it checks an existing
-   agent instead of overwriting it; it stops on incompatible sources.
-4. In **Compute → Apps → CFO Dashboard → Resources**, add the **new** Genie
-   Agent with **CAN RUN** permission, resource key `real-genie`.
-   Ensure the identity used by the app has required workspace / SQL warehouse /
-   Unity Catalog data privileges.
-5. The reference `app.yaml.txt` in this repo is already prepared.
-   Make sure the **deployed** `app.yaml` includes the existing Synthetic
-   `GENIE_SPACE_ID` **unchanged** and this resource-backed environment entry:
+## On the ABN laptop — no Python or SQL to edit
+
+1. **Copy or pull the Git branch** `feature/cfo-dual-data-mode-foundation`
+   to the existing CFO Dashboard Databricks Git folder. The essential new
+   files are `setup/ABN_REAL_GENIE_SETUP.py` and `setup/real_genie_auto.py`.
+   You also need the existing `setup/real_genie_uc_setup.py`,
+   `setup/real_genie_trusted_queries.sql` and the three `data/abn*.csv`
+   reporting extracts. Do not change any Synthetic source files.
+2. **Open `setup/ABN_REAL_GENIE_SETUP.py` as a Databricks Python notebook**,
+   attach compute that can create tables in your approved existing
+   `frbg3s_studio_a.cfo_cockpit` schema, and click **Run All once**. No widget,
+   hardcoded code edits or pasted SQL are required.
+   - Creates the three source-backed Unity Catalog reporting tables if absent,
+     with 10 Group rows, 28 segment rows and 22 historical NII/NIM rows.
+   - If all three tables exist, verifies them against every cell of the uploaded
+     source CSVs; refuses to change them if they differ.
+   - Creates a **separate** Real Data Genie Agent on SQL warehouse
+     `7405605052754358` with the approved sources, CFO instructions, five
+     suggested questions and ten tested SQL examples.
+   - If a same-named Genie Agent already exists, verifies its source table
+     list and warehouse before reusing it. Never silently repoints an agent.
+3. **Connect the Real Genie App resource in Databricks**. Go to **Compute →
+   Apps → CFO Dashboard → Configure resources**. Select **Add resource →
+   Genie Agent**, choose the newly created `ABN CFO Cockpit — Real Reported
+   Data`, set permission **CAN RUN**, and use resource key `real-genie`.
+   Ensure the app identity has appropriate access to the three UC tables and
+   SQL warehouse.
+4. **Deploy the app configuration**. The repo now contains a ready-to-copy
+   root `app.yaml`. It leaves the original `GENIE_SPACE_ID` unchanged and
+   adds:
 
    ```yaml
    - name: "REAL_GENIE_SPACE_ID"
      valueFrom: real-genie
    ```
 
-6. Redeploy. In **Real Data → Ask CFO Copilot** or **Jarvis**, change **Answer using**
-   to **Real Data Genie · SQL**, then validate SQL and returned source rows.
-   Confirm Synthetic mode still uses its original Genie ID and views.
+   Copy `app.yaml` into the deployed Databricks App **only if** it also
+   preserves any additional environment settings already configured in ABN.
+   Do not overwrite unrelated app settings.
+5. **Redeploy and verify** Real Data → Ask CFO Copilot / Jarvis → **Answer
+   using: Real Data Genie · SQL**. Inspect the generated SQL and returned rows
+   for one Group and one segment question, test follow-ups, and switch back to
+   Synthetic to confirm the original Genie remains unchanged.
 
-**Important:** No Databricks workspace API access is available from GitHub itself,
-so running the notebook and adding the approved App resource still happen on
-the ABN laptop. No warehouse ID, token or private account information should be
-committed to GitHub. This setup does not replace the Synthetic agent or data.
+**Still requires ABN access:** Running the notebook, approval to create tables /
+Genie Agents and adding the Databricks App resource can only happen inside ABN.
+No GitHub commit can provision or grant those live workspace permissions.
+Do not put credentials or confidential notebook output in this public repo.
+The warehouse ID is a configuration identifier, not a secret.
 
-**If the Python notebook refuses to import the project:** open it directly
-from the Git-backed repository folder (not a standalone copy). The notebook
-automatically finds the parent folder containing `data/` and `setup/`.
-If the Git folder is not mounted as standard Workspace files, use an approved
-Unity Catalog Volume and the advanced manual workflow below.
+**If Run All reports FileNotFoundError:** Launch the notebook in the same
+Git-backed folder as the `data/` and `setup/` directories. If ABN does not
+mount Git as workspace files, use a suitable approved UC Volume and follow
+the advanced steps below rather than changing paths blindly.
 
 ---
 
