@@ -247,7 +247,7 @@ class ReportedNewsTests(unittest.TestCase):
         self.assertIn("from src.reported_news import render_reported_news",mode)
         self.assertIn('if module == "strategy":',mode)
         shell=Path("main.py").read_text(encoding="utf-8")
-        self.assertIn("Official ECB news · AI relevance",shell)
+        self.assertIn("Financial news · AI relevance",shell)
         self.assertIn('f"#1 {top_strategy_name}"',shell)  # synthetic retained
         self.assertNotIn('"Strategic radar pending"',shell)
         synthetic=Path("src/modules/news.py").read_text(encoding="utf-8")
