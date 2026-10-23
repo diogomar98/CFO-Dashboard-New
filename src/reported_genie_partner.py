@@ -349,9 +349,10 @@ def ask_real_genie(question, *, conversation_id=None, scope=None,
 
 
 def answer_real_genie_question(question, *, scope=None, conversation_id=None,
-                               ask=None, generate=None):
+                               ask=None, generate=None, news_articles=None):
     """OpenAI reformulates the question for Genie, Genie queries Unity Catalog,
-    then OpenAI interprets the returned rows into a CFO-ready answer.
+    then OpenAI interprets the returned rows into a CFO-ready answer,
+    supplemented by recent news context when available.
     """
     prompt=_validate_question(question)
     fetch=ask if ask is not None else ask_real_genie
@@ -391,6 +392,22 @@ def answer_real_genie_question(question, *, scope=None, conversation_id=None,
             "Return a concise financial answer.\nRETRIEVED EVIDENCE JSON:\n"
             +json.dumps(evidence,default=str,allow_nan=False)[:MAX_ANALYSIS_CHARS]
         )
+        if news_articles:
+            news_items=[
+                {
+                    "headline":a.get("headline",""),
+                    "source":a.get("source",""),
+                    "published":a.get("published",""),
+                    "summary":a.get("summary",""),
+                }
+                for a in news_articles[:8]
+            ]
+            instructions+=(
+                "\n\nRECENT NEWS CONTEXT (narrative background only — not verified "
+                "financial data; use to add context to the Genie findings but never "
+                "as a source for specific figures or conclusions not in the data rows):\n"
+                +json.dumps(news_items,default=str,allow_nan=False)[:3000]
+            )
         try:
             answer=str(responder(instructions)).strip()
         except Exception:

@@ -407,9 +407,12 @@ def _send(question,evidence,history,*,method="factsheet"):
                 if not real_genie_configured():
                     st.warning("Set REAL_GENIE_SPACE_ID for the new Real Data Genie Agent.")
                     return
+                from src.reported_news import recent_official_articles
+                articles,_=recent_official_articles()
                 result=answer_real_genie_question(
                     question,scope=evidence["scope"],
                     conversation_id=thread.get("genie_conversation_id") if thread else None,
+                    news_articles=articles or None,
                 )
             else:
                 result=answer_reported_question(
