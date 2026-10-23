@@ -108,7 +108,9 @@ class FloatingCopilotTests(unittest.TestCase):
         self.assertIn('with st.chat_message(item["role"], avatar=',view)
         self.assertNotIn('_quarter_comparison_chart',view)
         self.assertNotIn("requests.post",view)
-        self.assertNotIn("genie_partner",view)
+        self.assertIn("answer_real_genie_question",view)
+        self.assertIn("real_genie_configured",view)
+        self.assertIn("answer_reported_question",view)
 
     def test_segment_questions_are_limited_to_segment_disclosures(self):
         segment=build_reported_state("Corporate Banking")
