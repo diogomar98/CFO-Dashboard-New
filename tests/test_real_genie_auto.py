@@ -5,7 +5,7 @@ from types import SimpleNamespace
 import unittest
 
 from setup.real_genie_auto import (
-    CATALOG, SCHEMA, TABLES, TITLE, EXPECTED_ROWS,
+    CATALOG, SCHEMA, TABLES, TITLE, WAREHOUSE_ID, EXPECTED_ROWS,
     genie_serialized_space, trusted_sql_examples, create_or_reuse_agent,
     validate_existing_tables,
 )
@@ -17,6 +17,7 @@ class RealGenieAutoTests(unittest.TestCase):
     def test_approved_catalog_schema_and_exact_tables(self):
         self.assertEqual((CATALOG, SCHEMA),
                          ("frbg3s_studio_a", "cfo_cockpit"))
+        self.assertEqual(WAREHOUSE_ID, "7405605052754358")
         data = json.loads(genie_serialized_space(ROOT))
         self.assertEqual(data["version"], 2)
         targets = [x["identifier"] for x in data["data_sources"]["tables"]]
@@ -28,6 +29,21 @@ class RealGenieAutoTests(unittest.TestCase):
         self.assertEqual(len(data["instructions"]["text_instructions"]), 1)
         self.assertIn("Never substitute Group figures",
                       data["instructions"]["text_instructions"][0]["content"][0])
+
+    def test_single_run_deployment_uses_approved_warehouse_and_yaml(self):
+        notebook = (ROOT / "setup" / "ABN_REAL_GENIE_SETUP.py").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("create_or_reuse_agent(", notebook)
+        self.assertIn("client, WAREHOUSE_ID, REPO_ROOT", notebook)
+        self.assertNotIn("dbutils.widgets", notebook)
+        self.assertNotIn("YOUR_APPROVED_", notebook)
+
+        yaml = (ROOT / "app.yaml").read_text(encoding="utf-8")
+        self.assertIn("GENIE_SPACE_ID", yaml)
+        self.assertIn("REAL_GENIE_SPACE_ID", yaml)
+        self.assertIn("valueFrom: real-genie", yaml)
+        self.assertIn("01f1ad042d3113b6b7a383586954667f", yaml)
 
     def test_ten_sql_examples_are_real_only_and_read_only(self):
         examples = trusted_sql_examples(ROOT)
