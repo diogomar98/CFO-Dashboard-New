@@ -33,6 +33,12 @@ class RealGenieIsolationTests(unittest.TestCase):
         },clear=True):
             self.assertTrue(real_genie_configured())
             self.assertEqual(real_genie_space_id(),"real-space")
+        with patch.dict(os.environ,{
+            "GENIE_SPACE_ID":"synthetic-space",
+            "REAL_GENIE_SPACE_ID":"synthetic-space",
+        },clear=True):
+            self.assertFalse(real_genie_configured())
+            self.assertEqual(real_genie_space_id(),"")
 
     def test_question_is_bounded_and_nonempty(self):
         for q in ("","  ","a"*1201,None):
