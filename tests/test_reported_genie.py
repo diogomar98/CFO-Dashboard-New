@@ -15,6 +15,7 @@ import pandas as pd
 
 from src.reported_genie_partner import (
     MAX_RETURNED_ROWS, _validate_question, _extract_verified_sql,
+    _genie_external_rows,
     real_genie_space_id, real_genie_configured,
     ask_real_genie, answer_real_genie_question,
 )
@@ -204,6 +205,51 @@ class RealGenieIsolationTests(unittest.TestCase):
         self.assertEqual(result["query_rows_status"],"query_fetch_failed_PermissionError")
         self.assertFalse(result["has_rows"])
         self.assertTrue(result["data"].empty)
+
+    def test_external_genie_json_array_rows_are_retrieved_without_auth_header(self):
+        payload=b'[["2026-06-30","781"]]'
+        class Download:
+            is_redirect=False
+            def __enter__(self): return self
+            def __exit__(self,*args): return False
+            def raise_for_status(self): return None
+            def iter_content(self,chunk_size):
+                yield payload
+        calls=[]
+        def download(url, **kwargs):
+            calls.append((url,kwargs))
+            return Download()
+        response=SimpleNamespace(statement_response=SimpleNamespace(
+            manifest=SimpleNamespace(
+                format="JSON_ARRAY",schema=SimpleNamespace(columns=[
+                    SimpleNamespace(name="date"),SimpleNamespace(name="net_profit_m"),
+                ]),
+            ),
+            result=SimpleNamespace(external_links=[SimpleNamespace(
+                external_link="https://abnresults.blob.core.windows.net/results/chunk?sig=private",
+                chunk_index=0,
+            )]),
+        ))
+        with patch("requests.get",side_effect=download):
+            frame,status=_genie_external_rows(response)
+        self.assertEqual(status,"external_rows_retrieved")
+        self.assertEqual(frame["net_profit_m"].tolist(),["781"])
+        self.assertEqual(len(calls),1)
+        self.assertFalse("Authorization" in calls[0][1])
+        self.assertFalse(calls[0][1]["allow_redirects"])
+
+    def test_external_genie_rejects_unapproved_host_without_download(self):
+        response=SimpleNamespace(statement_response=SimpleNamespace(
+            manifest=SimpleNamespace(format="JSON_ARRAY"),
+            result=SimpleNamespace(external_links=[SimpleNamespace(
+                external_link="https://localhost/query?sig=secret",
+                chunk_index=0,
+            )]),
+        ))
+        with patch("requests.get") as download:
+            with self.assertRaisesRegex(ValueError,"Unapproved"):
+                _genie_external_rows(response)
+        download.assert_not_called()
 
     def test_no_rows_never_manufactures_an_answer(self):
         generated=[]
