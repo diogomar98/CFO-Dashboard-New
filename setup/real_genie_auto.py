@@ -13,6 +13,7 @@ from uuid import NAMESPACE_URL, uuid5
 
 CATALOG = "frbg3s_studio_a"
 SCHEMA = "cfo_cockpit"
+WAREHOUSE_ID = "7405605052754358"  # Approved SQL warehouse; not a secret
 TITLE = "ABN CFO Cockpit — Real Reported Data"
 DESCRIPTION = (
     "Read-only ABN AMRO CFO analyst for reported Group profitability, capital, "
