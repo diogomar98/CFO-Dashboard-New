@@ -1,8 +1,8 @@
-"""Real Data CFO Copilot — open-ended sourced financial chat on existing gateway.
+"""Real CFO Copilot: verified factsheet AI and separately governed Real Genie.
 
-Synthetic Copilot, its AI Gateway client implementation and Databricks Genie
-remain completely unchanged. Every request carries a fresh, bounded packet
-of published Group values and a locally reconciled CET1 arithmetic bridge.
+Synthetic Copilot, its Databricks Genie Space and original AI Gateway client
+remain unchanged. Real users must explicitly select the Genie data source
+to query the independently governed Unity Catalog reporting Agent.
 """
 import json
 
@@ -71,9 +71,9 @@ def render_reported_copilot(s):
     render_html(
         '<div class="section-title">CFO Copilot · reported financial investigations</div>'
         '<div class="section-subtitle">'
-        'Use the original corporate AI Gateway with verified factsheet context. '
-        'Ask freely across sourced Group and segment financial figures. '
-        'For unsupported topics, Copilot explains what evidence is missing.'
+        'Ask the reported factsheet AI or explicitly select the new Real Genie '
+        'SQL Agent for governed quarterly data questions. Each answer reveals '
+        'its evidence; no Synthetic figures or agent are used in Real mode.'
         '</div>'
     )
     options=SEGMENT_TOPICS if s.business_line else GROUP_TOPICS
@@ -120,12 +120,13 @@ def render_reported_copilot(s):
         ],use_container_width=True,hide_index=True)
         st.caption(
             "These figures are from the official reporting extract. "
-            "No Synthetic values, unrestricted SQL or Genie data are included."
+            "These displayed numbers are factsheet values, not Genie-generated "
+            "queries. Real Genie is a separate opt-in source with inspectable SQL."
         )
     with st.expander("Inspect exact Real Data AI evidence payload"):
         st.code(json.dumps(evidence,ensure_ascii=False,indent=2),language="json")
     st.caption(
-        "The gateway request uses src.openai_partner.generate_prompt_response. "
-        "The same already-configured ABN token and routing apply; this module "
-        "does not modify the connection, Synthetic Copilot, or Genie integration."
+        "Factsheet AI uses the configured ABN Gateway; Real Genie uses a "
+        "separate REAL_GENIE_SPACE_ID and the existing Databricks SDK auth. "
+        "Synthetic mode and its original GENIE_SPACE_ID remain unchanged."
     )
