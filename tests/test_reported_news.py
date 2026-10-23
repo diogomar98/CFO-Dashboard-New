@@ -185,25 +185,35 @@ class ReportedNewsTests(unittest.TestCase):
         self.assertTrue(all(a.get("published") and a.get("headline")
                             for a in entries))
 
-    def test_blocked_abn_egress_keeps_real_snapshot_and_status(self):
-        with patch("src.reported_news.load_real_public_news",
-                   return_value=([],["ECB press releases: Outbound HTTPS/DNS connection failed"])):
+    def test_curated_publisher_selection_works_without_live_ecb(self):
+        from src.reported_news_partner import load_curated_bank_news
+        items,meta=load_curated_bank_news()
+        self.assertEqual(meta["mode"],"curated")
+        self.assertGreaterEqual(len(items),9)
+        self.assertTrue(any("Bloomberg" in x["source"] for x in items))
+        self.assertTrue(any("Yahoo Finance" in x["source"] for x in items))
+        self.assertTrue(any("FD Partner" in x["source"] for x in items))
+        self.assertTrue(any("Financial Times" in x["source"] for x in items))
+        self.assertTrue(all(x["url"].startswith("https://") for x in items))
+        self.assertEqual(len({x["url"] for x in items}),len(items))
+        self.assertFalse(any("rate_shock_bps" in x for x in items))
+
+    def test_restricted_app_never_attempts_live_internet_for_curated_news(self):
+        with patch("src.reported_news.load_real_public_news") as network:
+            items,warnings,status=recent_official_articles(include_status=True)
+            network.assert_not_called()
+        self.assertGreaterEqual(len(items),9)
+        self.assertEqual(status["mode"],"curated")
+        self.assertFalse(warnings)
+        self.assertTrue(all(x["snapshot"] for x in items))
+
+    def test_curated_source_fallback_is_dated_official_ecb_archive(self):
+        with patch("src.reported_news.load_curated_bank_news",
+                   return_value=([],{"mode":"none"})):
             items,warnings,status=recent_official_articles(include_status=True)
         self.assertGreaterEqual(len(items),10)
         self.assertEqual(status["mode"],"snapshot")
-        self.assertTrue(any("Live ECB feeds unavailable" in x for x in warnings))
-        self.assertFalse(any("Synthetic" in x for x in warnings))
-        self.assertNotIn("rate_shock_bps",items[0])
-
-    def test_live_feed_takes_priority_over_saved_snapshot(self):
-        with patch("src.reported_news.load_real_public_news",
-                   return_value=(self.articles,[])):
-            with patch("src.reported_news.load_official_news_snapshot") as loader:
-                items,warnings,status=recent_official_articles(include_status=True)
-                loader.assert_not_called()
-        self.assertEqual(status["mode"],"live")
-        self.assertEqual(items,self.articles)
-        self.assertFalse(warnings)
+        self.assertTrue(any("older ECB snapshot" in w for w in warnings))
 
     def test_source_diagnostics_suppress_internal_proxy_details(self):
         import requests
@@ -220,11 +230,12 @@ class ReportedNewsTests(unittest.TestCase):
         code=Path("src/reported_news.py").read_text(encoding="utf-8")
         brief=Path("src/reported_brief.py").read_text(encoding="utf-8")
         self.assertIn("recent_official_articles(include_status=True)",code)
-        self.assertIn("News connection diagnostics",code)
-        self.assertIn("Retry live ECB connection",code)
-        self.assertIn("news is unavailable",code.lower())
+        self.assertIn("rn-news-scroll",code)
+        self.assertNotIn("Retry live ECB connection",code)
+        self.assertNotIn("News connection diagnostics",code)
+        self.assertIn("data/abn_news_curated.json",code)
         self.assertIn("recent_official_articles(include_status=True)",brief)
-        self.assertIn("Saved official ECB headlines",brief)
+        self.assertIn("Multi-publisher financial news",brief)
         self.assertIn("AI relevance",brief)
         self.assertIn("Official excerpt",brief)
         self.assertIn("rb-news-grid",brief)
