@@ -100,7 +100,7 @@ class GeneralReportedQuestions(unittest.TestCase):
         self.assertIn('with st.form("jarvis_composer_form"',floating)
         self.assertIn('with st.form("real_cfo_chat_form_"+str(compact)',floating)
         self.assertIn('width:min(560px',floating)
-        self.assertIn('height:min(800px',floating)
+        self.assertIn('height:min(730px',floating)
         self.assertIn('answer_reported_question(question,evidence,history=previous)',floating)
         self.assertNotIn('st.container(key=',floating)
         central=Path("src/reported_copilot.py").read_text("utf-8")
