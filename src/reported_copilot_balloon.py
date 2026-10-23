@@ -436,6 +436,7 @@ def _send(question,evidence,history,*,method="factsheet"):
         assistant["sql"]=result.get("sql")
         assistant["data"]=result.get("data")
         assistant["has_rows"]=result.get("has_rows",False)
+        assistant["query_rows_status"]=result.get("query_rows_status","unavailable")
         if thread:
             thread["genie_conversation_id"]=result.get("conversation_id")
     history.extend([
@@ -465,9 +466,22 @@ def _genie_provenance(item):
         if isinstance(data,pd.DataFrame) and not data.empty:
             st.dataframe(data,use_container_width=True,hide_index=True)
         else:
+            status=item.get("query_rows_status","unavailable")
+            reasons={
+                "no_sql_attachment":"Genie did not generate a SQL query for this answer.",
+                "zero_query_rows":"The generated SQL returned zero rows.",
+                "missing_statement_response":"Genie did not return a statement response with data rows.",
+                "missing_attachment_identifiers":"Genie did not provide the message/attachment IDs needed to fetch rows.",
+            }
+            explanation=reasons.get(status)
+            if explanation is None and status.startswith("query_fetch_failed_"):
+                explanation=(
+                    "SQL results could not be retrieved through the Genie API. "
+                    "Error class: "+status.removeprefix("query_fetch_failed_")
+                )
             st.caption(
-                "No query-result rows were available for verification. "
-                "Do not rely on unconfirmed numerical claims."
+                (explanation or "No SQL query-result rows were available.")
+                +" Numerical conclusions are not verified in this app."
             )
 
 
