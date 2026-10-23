@@ -1,0 +1,106 @@
+{
+  "source_type": "verified_editorial_selection",
+  "as_of": "2026-10-23",
+  "description": "Manually verified public publisher articles, link/date/title and cautious editorial summaries. Offline curation only; not live feed or full-text article access.",
+  "articles": [
+    {
+      "date": "2026-10-21",
+      "source": "Banken.nl",
+      "headline": "Dutch banks including ABN AMRO collaborate on the MyCheck identity wallet",
+      "url": "https://www.banken.nl/nieuws/27502/rabobank-abn-amro-asn-bank-en-partners-bouwen-nederlandse-identiteitswallet-mycheck",
+      "summary": "ABN AMRO, Rabobank, ASN Bank and partners are developing a Dutch digital identity wallet. Potential operational and client-onboarding implications, not measured earnings impacts.",
+      "topic": "Digital banking",
+      "priority": 8
+    },
+    {
+      "date": "2026-10-13",
+      "source": "Banken.nl",
+      "headline": "ABN AMRO pilots AI agents for financial crime prevention",
+      "url": "https://www.banken.nl/nieuws/27468/abn-amro-test-ai-agents-tegen-financiele-criminaliteit",
+      "summary": "The bank launched a six-month pilot with Wonderful to assess AI agents in financial-crime detection and customer-data workflows, with human oversight.",
+      "topic": "Risk & AI",
+      "priority": 9
+    },
+    {
+      "date": "2026-10-07",
+      "source": "Bloomberg",
+      "headline": "Dutch Government Plans to Halve ABN Amro Stake to 10.5%",
+      "url": "https://news.bloomberglaw.com/banking-law/dutch-government-plans-to-halve-abn-amro-stake-to-10-5-3",
+      "summary": "NLFI outlined a plan to reduce the Dutch state's holding from 20.7% to 10.5%, a potential capital-markets and governance development rather than a bank earnings driver.",
+      "topic": "Shareholding / strategy",
+      "priority": 10
+    },
+    {
+      "date": "2026-10-06",
+      "source": "Yahoo Finance · Proactive",
+      "headline": "NatWest is one of Citi's top picks as European bank credit growth holds firm",
+      "url": "https://uk.finance.yahoo.com/news/natwest-one-citis-top-pick-120000464.html",
+      "summary": "Citi highlighted ABN AMRO among preferred European lenders, pointing to loan growth and deposit margin pressures across the sector. This is analyst opinion, not an ABN forecast.",
+      "topic": "Peers / NII",
+      "priority": 9
+    },
+    {
+      "date": "2026-10-05",
+      "source": "Banken.nl",
+      "headline": "ABN AMRO sees Dutch housing market cooling more sharply in 2027",
+      "url": "https://www.banken.nl/nieuws/27449/woningmarkt-koelt-in-2027-sterker-af",
+      "summary": "ABN AMRO revised its Dutch house-price-growth expectation for 2027 lower, amid continued mortgage-rate pressure. Relevant to mortgage exposure discussions, not a credit-loss shock.",
+      "topic": "Mortgages / credit",
+      "priority": 10
+    },
+    {
+      "date": "2026-10-01",
+      "source": "Yahoo Finance · Retail Banker International",
+      "headline": "Infosys to support ABN AMRO’s wider AI rollout",
+      "url": "https://finance.yahoo.com/technology/ai/articles/infosys-support-abn-amro-wider-113137116.html",
+      "summary": "ABN AMRO expanded its technology collaboration with Infosys to support IT modernisation and wider AI deployment. Costs and savings are not quantified in the article.",
+      "topic": "Technology / costs",
+      "priority": 8
+    },
+    {
+      "date": "2026-10-01",
+      "source": "FD Partner Content · ABN AMRO Sector Insights",
+      "headline": "Kantelpunt 2026: elektrificatie breekt door in wegtransport",
+      "url": "https://partner.fd.nl/abn-amro-sector-insights/12169/kantelpunt-2026-elektrificatie-breekt-door-in-wegtransport/",
+      "summary": "ABN AMRO sector analysis describes accelerating truck electrification and energy-grid constraints. Sponsored content, not independent FD editorial reporting.",
+      "topic": "Commercial lending / transition",
+      "priority": 6
+    },
+    {
+      "date": "2026-09-16",
+      "source": "Banken.nl",
+      "headline": "ABN AMRO explores a partnership for its investment-solutions business",
+      "url": "https://www.banken.nl/nieuws/27401/abn-amro-onderzoekt-partnerschap-voor-vermogensbeheertak",
+      "summary": "ABN AMRO Investment Solutions is exploring a partnership to strengthen its investment offering. No transaction or valuation is confirmed by this source.",
+      "topic": "Wealth / strategic options",
+      "priority": 9
+    },
+    {
+      "date": "2026-08-28",
+      "source": "Banken.nl",
+      "headline": "DNB withdraws minimum mortgage risk-weight floor for Dutch banks",
+      "url": "https://www.banken.nl/nieuws/27345/dnb-schrapt-minimumvloer-hypotheken-miljarden-aan-bankkapitaal-vallen-vrij",
+      "summary": "A change in Dutch mortgage risk-weight regulation may affect banks' capital calculations; the article alone does not quantify an ABN-specific CET1 effect.",
+      "topic": "Capital / mortgages",
+      "priority": 9
+    },
+    {
+      "date": "2026-05-20",
+      "source": "Bloomberg",
+      "headline": "Intesa, ABN Amro Join Stablecoin Push to Blunt Dollar Dominance",
+      "url": "https://www.bloomberg.com/news/articles/2026-05-20/intesa-abn-amro-join-stablecoin-push-to-blunt-dollar-dominance",
+      "summary": "ABN AMRO joined a European banking consortium developing a euro stablecoin. This is a strategic payments development, not an immediately measurable P&L impact.",
+      "topic": "Payments / strategy",
+      "priority": 6
+    },
+    {
+      "date": "2026-03-30",
+      "source": "Financial Times",
+      "headline": "ABN Amro CEO: ‘You don’t want to be a herbivore in a world of carnivores’",
+      "url": "https://www.ft.com/content/2d33bf77-f3c0-47c6-b918-a96b0de0b32c",
+      "summary": "An FT interview discusses ABN AMRO's cost restructuring, capital allocation and AI adoption strategy. Older strategy context, not breaking news.",
+      "topic": "Strategy / costs",
+      "priority": 7
+    }
+  ]
+}
