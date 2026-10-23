@@ -20,8 +20,12 @@ MAX_ANALYSIS_CHARS = 22000
 
 
 def real_genie_space_id():
-    """Read current deployment configuration; do not reuse Synthetic ID."""
-    return os.environ.get(REAL_SPACE_ENV, "").strip()
+    """Require a distinct deployment ID; never accidentally reuse Synthetic."""
+    real_id=os.environ.get(REAL_SPACE_ENV,"").strip()
+    synthetic_id=os.environ.get("GENIE_SPACE_ID","").strip()
+    if not real_id or (synthetic_id and real_id==synthetic_id):
+        return ""
+    return real_id
 
 
 def real_genie_configured():
