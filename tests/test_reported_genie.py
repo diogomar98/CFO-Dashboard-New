@@ -202,7 +202,7 @@ class RealGenieIsolationTests(unittest.TestCase):
                 "Net profit?",space_id="real-space",
                 client=SimpleNamespace(genie=Genie()),
             )
-        self.assertEqual(result["query_rows_status"],"query_fetch_failed_PermissionError")
+        self.assertEqual(result["query_rows_status"],"sdk_result_failed_PermissionError")
         self.assertFalse(result["has_rows"])
         self.assertTrue(result["data"].empty)
 
