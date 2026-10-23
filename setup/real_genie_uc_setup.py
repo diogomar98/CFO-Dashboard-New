@@ -180,9 +180,7 @@ def prepare_source_tables(spark, *,catalog, schema,source_dir):
         source=spark.createDataFrame(
             list(_to_rows(name,frame)),schema=_schema(name),
         )
-        # Spark Connect compatibility: saveAsTable defaults to fail-if-table-exists.
-        # The explicit tableExists check above additionally prevents rewrites.
-        source.write.saveAsTable(target)
+        source.write.mode("ignore").saveAsTable(target)
         # These comments are source metadata to help Genie generate correct SQL.
         description={
             "cfo_group_quarterly":"ABN AMRO published Group 2024 Q1–2026 Q2 quarterly actuals; P&L fields are flows, balance-sheet/capital/liquidity fields are quarter-end stocks or ratios. Null means not disclosed.",
