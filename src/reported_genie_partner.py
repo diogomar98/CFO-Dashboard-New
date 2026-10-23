@@ -106,25 +106,40 @@ def ask_real_genie(question, *, conversation_id=None, scope=None,
         answer=_extract_answer_text(msg).strip()
         sql,attachment=_extract_verified_sql(msg)
         frame=pd.DataFrame()
+        rows_status="no_sql_attachment"
         if attachment is not None:
             query=getattr(attachment,"query",None)
             cid=_msg_attr(msg,"conversation_id")
             mid=_msg_attr(msg,"message_id","id")
+            # attachment_id is the attachment UUID, not the SQL statement_id.
             aid=(
                 _msg_attr(attachment,"attachment_id","id")
-                or _msg_attr(query,"id","attachment_id","statement_id")
+                or _msg_attr(query,"id","attachment_id")
             )
+            rows_status="missing_attachment_identifiers"
             try:
-                result=getattr(msg,"query_result",None)
-                if result is None and cid and mid and aid:
-                    result=_fetch_query_result(
+                if cid and mid and aid:
+                    # GenieMessage.query_result is DEPRECATED result metadata,
+                    # not actual SQL rows. Always fetch the statement_response
+                    # through the dedicated Genie attachment-result API.
+                    response=_fetch_query_result(
                         db,configured_space,cid,mid,aid,
                     )
-                if result is not None:
-                    frame=_rows_to_dataframe(result)
-            except Exception:
-                # The response is still useful, but must disclose that
-                # numeric rows could not be verified in this app.
+                    if getattr(response,"statement_response",None) is None:
+                        rows_status="missing_statement_response"
+                    else:
+                        frame=_rows_to_dataframe(response)
+                        rows_status="rows_retrieved" if not frame.empty else "zero_query_rows"
+                else:
+                    # Some older SDKs may inline a full statement response.
+                    inline=getattr(msg,"query_result",None)
+                    if getattr(inline,"statement_response",None) is not None:
+                        frame=_rows_to_dataframe(inline)
+                        rows_status="rows_retrieved" if not frame.empty else "zero_query_rows"
+            except Exception as exc:
+                # Fail closed: never synthesize SQL data from Genie's prose.
+                # Export only a safe error CLASS for UI troubleshooting.
+                rows_status="query_fetch_failed_"+type(exc).__name__
                 frame=pd.DataFrame()
         if len(frame)>MAX_RETURNED_ROWS:
             frame=frame.head(MAX_RETURNED_ROWS)
@@ -138,6 +153,7 @@ def ask_real_genie(question, *, conversation_id=None, scope=None,
             "source":"Real Data Genie Agent · governed Unity Catalog reporting views",
             "has_rows":not frame.empty,
             "row_count":len(frame),
+            "query_rows_status":rows_status,
             "used_genie":True,
         }
     except (RuntimeError,ValueError):
@@ -204,11 +220,23 @@ def answer_real_genie_question(question, *, scope=None, conversation_id=None,
             # Safest fallback is *raw* generated data, not invented analysis.
             answer="Genie returned a data table. Review the rows and SQL below; AI commentary is unavailable."
     elif narrative:
+        rows_status=str(result.get("query_rows_status") or "unavailable")
+        reason=(
+            "Genie returned a text-only answer without a SQL query."
+            if rows_status=="no_sql_attachment" else
+            "The SQL query returned no rows."
+            if rows_status=="zero_query_rows" else
+            "The Genie API returned no statement-response data."
+            if rows_status=="missing_statement_response" else
+            "The app could not retrieve the result (missing query identifiers)."
+            if rows_status=="missing_attachment_identifiers" else
+            "The app could not retrieve the SQL result ("+rows_status+")."
+        )
         answer=(
             "**Genie response (no query rows available for verification):** "
             +narrative[:2500]
-            +"\n\nVerify the SQL or attach the required certified view before "
-            "relying on numerical conclusions."
+            +"\n\n"+reason+" Do not rely on numerical conclusions "
+            "until the query rows have been verified."
         )
     else:
         answer=(
@@ -223,5 +251,6 @@ def answer_real_genie_question(question, *, scope=None, conversation_id=None,
         "conversation_id":result.get("conversation_id"),
         "used_genie":True,
         "has_rows":has_rows,
+        "query_rows_status":result.get("query_rows_status","unavailable"),
         "mode":"real",
     }
