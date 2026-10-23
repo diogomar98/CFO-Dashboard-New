@@ -42,7 +42,7 @@ SQL_QUESTIONS = (
 INSTRUCTIONS = """You are the ABN AMRO CFO Real Reported Data analyst. Answer in concise financial language.
 
 SOURCES AND SCOPE
-- Use ONLY the three attached certified reporting tables in frbg3as_studio_a.cfo_cockpit.
+- Use ONLY the three attached certified reporting tables in frbg3s_studio_a.cfo_cockpit.
 - These are reported/extracted facts, not synthetic data or live core-bank operational data.
 - Data ends Q2 2026. 'date' is the financial quarter-end; use MAX(date) for the latest value.
 - Group income statement data start Q1 2024; Group balance sheet, capital and liquidity start Q4 2024.
@@ -124,23 +124,25 @@ def genie_serialized_space(repo_root: Path) -> str:
     data = {
         "version": 2,
         "config": {
-            "sample_questions": [
-                {"id": _id(f"sample-{i}"), "question": [question]}
-                for i, question in enumerate(SQL_QUESTIONS[:5], start=1)
-            ]
+            "sample_questions": sorted(
+                [{"id": _id(f"sample-{i}"), "question": [question]}
+                 for i, question in enumerate(SQL_QUESTIONS[:5], start=1)],
+                key=lambda q: q["id"],
+            )
         },
         "data_sources": {
-            "tables": [
-                {"identifier": f"{CATALOG}.{SCHEMA}.{name}"}
-                for name in TABLES
-            ]
+            "tables": sorted(
+                [{"identifier": f"{CATALOG}.{SCHEMA}.{name}"}
+                 for name in TABLES],
+                key=lambda t: t["identifier"],
+            )
         },
         "instructions": {
             "text_instructions": [{
                 "id": _id("finance-instructions"),
                 "content": [INSTRUCTIONS],
             }],
-            "example_question_sqls": example_queries,
+            "example_question_sqls": sorted(example_queries, key=lambda q: q["id"]),
         },
     }
     return json.dumps(data, ensure_ascii=False)
