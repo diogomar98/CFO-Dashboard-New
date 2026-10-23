@@ -4,3 +4,5 @@ env:
     value: "false"
   - name: "GENIE_SPACE_ID"
     value: "01f1ad042d3113b6b7a383586954667f"
+  - name: "REAL_GENIE_SPACE_ID"
+    valueFrom: real-genie
