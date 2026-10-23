@@ -16,7 +16,7 @@ ROOT = Path(__file__).resolve().parents[1]
 class RealGenieAutoTests(unittest.TestCase):
     def test_approved_catalog_schema_and_exact_tables(self):
         self.assertEqual((CATALOG, SCHEMA),
-                         ("frbg3s_studio_a", "cfo_cockpit"))
+                         ("frbg3as_studio_a", "cfo_cockpit"))
         self.assertEqual(WAREHOUSE_ID, "7405605052754358")
         data = json.loads(genie_serialized_space(ROOT))
         self.assertEqual(data["version"], 2)
@@ -51,7 +51,7 @@ class RealGenieAutoTests(unittest.TestCase):
         for sample in examples:
             sql = sample["sql"][0].lstrip()
             self.assertTrue(sql.upper().startswith("SELECT"))
-            self.assertIn("frbg3s_studio_a.cfo_cockpit.", sql)
+            self.assertIn("frbg3as_studio_a.cfo_cockpit.", sql)
             self.assertNotIn("REPLACE_CATALOG", sql)
             self.assertNotIn("finance.gold", sql)
             self.assertNotIn(";", sql)
