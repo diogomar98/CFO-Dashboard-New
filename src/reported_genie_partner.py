@@ -12,10 +12,6 @@ import re
 
 import pandas as pd
 
-from src.genie_partner import (
-    _extract_answer_text, _extract_query_attachment, _fetch_query_result,
-    _get_client, _msg_attr, _rows_to_dataframe,
-)
 
 REAL_SPACE_ENV = "REAL_GENIE_SPACE_ID"
 MAX_QUESTION_LENGTH = 1200
@@ -41,6 +37,8 @@ def _validate_question(question):
 
 
 def _extract_verified_sql(message):
+    # Lazy import keeps the default factsheet path independent of SDK setup.
+    from src.genie_partner import _extract_query_attachment
     attachment=_extract_query_attachment(message)
     if attachment is None:
         return None,None
@@ -80,6 +78,12 @@ def ask_real_genie(question, *, conversation_id=None, scope=None,
             "are not in the approved source. If absent, say it is unavailable. "
             "Do not silently substitute Group metrics.\n\nQuestion: "+prompt
         )
+    # The existing Synthetic SDK helpers are reused, but neither its
+    # space ID nor its USE_MOCKS branch is ever accessed by this adapter.
+    from src.genie_partner import (
+        _extract_answer_text, _fetch_query_result,
+        _get_client, _msg_attr, _rows_to_dataframe,
+    )
     db=client if client is not None else _get_client()
     try:
         if conversation_id:
