@@ -137,7 +137,8 @@ class ReportedNewsTests(unittest.TestCase):
         with patch("src.reported_news.load_real_news_ai_classification",
                    side_effect=RuntimeError("unavailable")):
             classifications,error=official_article_classifications([self.policy_article])
-        self.assertEqual(classifications,{})
+        self.assertEqual(classifications[self.policy_article["id"]]["relevance"],"UNRATED")
+        self.assertIsNone(classifications[self.policy_article["id"]]["confidence"])
         self.assertIsNotNone(error)
 
     def test_ecb_rate_event_requires_date_and_verified_post_close_change(self):
@@ -197,6 +198,130 @@ class ReportedNewsTests(unittest.TestCase):
         self.assertTrue(all(x["url"].startswith("https://") for x in items))
         self.assertEqual(len({x["url"] for x in items}),len(items))
         self.assertFalse(any("rate_shock_bps" in x for x in items))
+
+    def test_curated_relevance_and_business_line_tags_match_reported_sources(self):
+        from src.reported_news_partner import (
+            load_curated_bank_news,REPORTED_NEWS_SEGMENTS,RELEVANCE_LEVELS,
+        )
+        from src.real_data_mode import build_reported_state
+        items,_=load_curated_bank_news()
+        actual=set(build_reported_state().reported_segments["business_line"])
+        self.assertEqual(set(REPORTED_NEWS_SEGMENTS),actual)
+        self.assertTrue(all(a["editorial_relevance"] in RELEVANCE_LEVELS
+                            for a in items))
+        self.assertTrue(all(a["segments"] for a in items))
+        self.assertTrue(all(set(a["segments"]).issubset(actual) for a in items))
+        self.assertTrue(all(a["editorial_reason"] for a in items))
+        self.assertEqual(
+            sum(a["editorial_relevance"]=="HIGH" for a in items),4,
+        )
+
+    def test_combined_filters_use_reviewed_relevance_and_exact_segment(self):
+        from src.reported_news import (
+            _effective_news_assessment,filter_financial_news,
+        )
+        from src.reported_news_partner import load_curated_bank_news
+        items,_=load_curated_bank_news()
+        assessments={
+            a["id"]:_effective_news_assessment(a) for a in items
+        }
+        high=filter_financial_news(items,assessments,relevance="High")
+        self.assertEqual(len(high),4)
+        wealth=filter_financial_news(
+            items,assessments,segment="Wealth Management",
+        )
+        self.assertTrue(wealth)
+        self.assertTrue(all("Wealth Management" in a["segments"]
+                            for a in wealth))
+        high_wealth=filter_financial_news(
+            items,assessments,relevance="High",segment="Wealth Management",
+        )
+        self.assertEqual(len(high_wealth),2)
+        self.assertTrue(all(a["editorial_relevance"]=="HIGH"
+                            for a in high_wealth))
+        high_corporate=filter_financial_news(
+            items,assessments,relevance="High",segment="Corporate Banking",
+        )
+        self.assertEqual(len(high_corporate),1)
+        # Group Functions is not equivalent to all business segments.
+        group=filter_financial_news(
+            items,assessments,segment="Group Functions",
+        )
+        self.assertTrue(all("Group Functions" in a["segments"] for a in group))
+        self.assertEqual(
+            len(filter_financial_news(items,assessments)),len(items)
+        )
+        with self.assertRaises(ValueError):
+            filter_financial_news(items,assessments,relevance="Critical")
+        with self.assertRaises(ValueError):
+            filter_financial_news(items,assessments,segment="Retail Banking")
+
+    def test_editorial_review_not_silently_overridden_by_disagreeing_ai(self):
+        from src.reported_news import _effective_news_assessment
+        from src.reported_news_partner import load_curated_bank_news
+        items,_=load_curated_bank_news()
+        article=next(a for a in items if a["editorial_relevance"]=="HIGH")
+        conflict=_effective_news_assessment(
+            article,{"relevance":"LOW","reason":"Contradictory",
+                     "confidence":0.99,"metric":"None"},
+        )
+        self.assertEqual(conflict["relevance"],"HIGH")
+        self.assertEqual(conflict["relevance_origin"],"Editorial review")
+        self.assertIsNone(conflict["confidence"])
+        self.assertEqual(conflict["reason"],article["editorial_reason"])
+        agreement=_effective_news_assessment(
+            article,{"relevance":"HIGH","reason":"Direct governance change",
+                     "confidence":0.8,"metric":"CET1"},
+        )
+        self.assertEqual(agreement["confidence"],0.8)
+        self.assertTrue(agreement["ai_agrees"])
+        self.assertEqual(agreement["reason"],"Direct governance change")
+
+    def test_model_runs_on_all_curated_articles_in_batches(self):
+        from src.reported_news import official_article_classifications
+        from src.reported_news_partner import load_curated_bank_news
+        items,_=load_curated_bank_news()
+        batches=[]
+        def classify(batch):
+            batches.append(len(batch))
+            return [{"id":a["id"],"relevance":a["editorial_relevance"],
+                     "reason":"Potential financial relevance",
+                     "metric":"NII","confidence":0.8} for a in batch]
+        with patch("src.reported_news.load_real_news_ai_classification",
+                   side_effect=classify):
+            result,error=official_article_classifications(items)
+        self.assertIsNone(error)
+        self.assertEqual(batches,[8,3])
+        self.assertEqual(len(result),11)
+        self.assertTrue(all(result[a["id"]]["confidence"]==0.8 for a in items))
+        # Corporate gateway unavailable: deterministic reviewed filters still work.
+        with patch("src.reported_news.load_real_news_ai_classification",
+                   side_effect=RuntimeError("Gateway unavailable")):
+            reviewed,error=official_article_classifications(items)
+        self.assertIsNotNone(error)
+        self.assertEqual(len(reviewed),11)
+        self.assertTrue(all(v["relevance"] in {"HIGH","MEDIUM","LOW"}
+                            for v in reviewed.values()))
+        self.assertTrue(all(v["confidence"] is None for v in reviewed.values()))
+
+    def test_segment_labels_render_on_original_coloured_cards(self):
+        from src.reported_news_partner import load_curated_bank_news
+        from src.reported_brief import _official_article_card
+        from src.reported_news import _effective_news_assessment
+        items,_=load_curated_bank_news()
+        item=next(a for a in items if "Wealth Management" in a["segments"])
+        markup=_official_article_card(item,_effective_news_assessment(item),saved=True)
+        self.assertIn("Potential business lines",markup)
+        self.assertIn("Wealth Management",markup)
+        self.assertIn("Reviewed relevance",markup)
+        self.assertIn("Confidence · Not assessed",markup)
+        self.assertIn("status-impact-",markup)
+        view=Path("src/reported_news.py").read_text(encoding="utf-8")
+        self.assertIn("rn_filter_relevance",view)
+        self.assertIn("rn_filter_segment",view)
+        self.assertIn("How is relevance defined?",view)
+        self.assertIn("filter_financial_news(",view)
+        self.assertIn("rn-news-scroll",view)
 
     def test_restricted_app_never_attempts_live_internet_for_curated_news(self):
         with patch("src.reported_news.load_real_public_news") as network:
