@@ -111,6 +111,61 @@ class GenieRowsTests(unittest.TestCase):
             "/messages/message-1/attachments/attachment-1/query-result"
         ))
 
+    def test_reads_existing_genie_statement_by_statement_id(self):
+        calls=[]
+        actual=SimpleNamespace(
+            status=SimpleNamespace(state="SUCCEEDED"),
+            manifest=SimpleNamespace(schema=SimpleNamespace(columns=[
+                SimpleNamespace(name="date",type_name="DATE"),
+                SimpleNamespace(name="net_profit_m",type_name="DOUBLE"),
+            ]),total_row_count=1),
+            result=SimpleNamespace(data_array=[["2026-06-30","780.531615084"]]),
+        )
+        class Statements:
+            def get_statement(self, *, statement_id):
+                calls.append(statement_id)
+                return actual
+        db=SimpleNamespace(
+            statement_execution=Statements(),
+            api_client=None,
+        )
+        fake=SimpleNamespace(
+            _fetch_query_result=lambda *args:SimpleNamespace(
+                statement_response=None
+            ),
+        )
+        with patch.dict(sys.modules,{"src.genie_partner":fake}):
+            rows,status=_verified_query_rows(
+                db,"real-space","conv-1","msg-1","attachment-1",
+                statement_id="genie-statement-id",
+            )
+        self.assertEqual(status,"sql_statement_rows_retrieved")
+        self.assertEqual(calls,["genie-statement-id"])
+        self.assertEqual(rows.iloc[0]["date"],"2026-06-30")
+        self.assertAlmostEqual(rows.iloc[0]["net_profit_m"],780.531615084)
+
+    def test_sql_scope_error_is_explicit_without_faking_rows(self):
+        class Statements:
+            def get_statement(self, *, statement_id):
+                raise PermissionError("Sensitive authorization message")
+        db=SimpleNamespace(
+            statement_execution=Statements(),
+            api_client=None,
+        )
+        fake=SimpleNamespace(
+            _fetch_query_result=lambda *args:SimpleNamespace(
+                statement_response=None
+            ),
+        )
+        with patch.dict(sys.modules,{"src.genie_partner":fake}):
+            rows,status=_verified_query_rows(
+                db,"real-space","conv-1","msg-1","attachment-1",
+                statement_id="genie-statement-id",
+            )
+        self.assertTrue(rows.empty)
+        self.assertEqual(status,"sql_statement_fetch_failed_PermissionError")
+        self.assertNotIn("Sensitive",status)
+
     def test_limited_to_fifty_rows(self):
         response={"statement_response":{
             "manifest":{"schema":{"columns":[{"name":"amount"}]},
