@@ -143,18 +143,23 @@ def _genie_external_rows(response):
     return pd.concat(frames, ignore_index=True), "external_rows_retrieved"
 
 
-def _verified_query_rows(db, space_id, conversation_id, message_id, attachment_id):
-    """Recover already-executed Genie rows; never re-run Genie SQL.
+def _verified_query_rows(db, space_id, conversation_id, message_id,
+                         attachment_id, *, statement_id=None):
+    """Read already executed Genie rows, with a governed statement-ID fallback.
 
-    SDK response deserialization varies: first decode inline/typed arrays,
-    then fall back to the authenticated SDK's raw API on an empty result.
+    Retrieval order:
+      1. Genie attachment SDK endpoint
+      2. Original Genie attachment raw REST endpoint
+      3. SQL Statement Execution get_statement on Genie's OWN statement_id
+    Never execute or rewrite Genie-generated SQL. Only return verifiable rows.
     """
     from src.genie_partner import _fetch_query_result
-    from src.reported_genie_rows import decode_genie_rows
+    from src.reported_genie_rows import decode_genie_rows, _field
 
     def read_response(response):
         frame, status = decode_genie_rows(response, max_rows=MAX_RETURNED_ROWS)
         if status == "external_links_only":
+            # External chunk URLs are fetched without passing bank auth tokens.
             return _genie_external_rows(response)
         return frame, status
 
@@ -170,25 +175,50 @@ def _verified_query_rows(db, space_id, conversation_id, message_id, attachment_i
     except Exception as exc:
         status = "sdk_result_failed_" + type(exc).__name__
 
-    # If the SDK discards data_typed_array or returns a shape we don't know,
-    # the same authorized WorkspaceClient can fetch unmodified response JSON.
     client = getattr(db, "api_client", None)
-    if not callable(getattr(client, "do", None)):
-        return frame, status
-    path = (
-        f"/api/2.0/genie/spaces/{space_id}/conversations/{conversation_id}"
-        f"/messages/{message_id}/attachments/{attachment_id}/query-result"
-    )
-    try:
-        raw = client.do("GET", path)
-        from src.genie_partner import _parse_rest_query_result
-        response = (
-            _parse_rest_query_result(raw) if isinstance(raw, dict) else raw
+    if callable(getattr(client, "do", None)):
+        path = (
+            f"/api/2.0/genie/spaces/{space_id}/conversations/{conversation_id}"
+            f"/messages/{message_id}/attachments/{attachment_id}/query-result"
         )
-        return read_response(response)
+        try:
+            raw = client.do("GET", path)
+            if isinstance(raw, dict):
+                from src.genie_partner import _parse_rest_query_result
+                response = _parse_rest_query_result(raw)
+            else:
+                response = raw
+            raw_frame, raw_status = read_response(response)
+            if not raw_frame.empty or raw_status == "zero_query_rows":
+                return raw_frame, raw_status
+            frame, status = raw_frame, raw_status
+        except Exception as exc:
+            status = "raw_result_failed_" + type(exc).__name__
+
+    # Databricks Genie exposes the executed statement_id on its SQL
+    # attachment. Get its existing result using the SQL Statement Execution
+    # API without running any new SQL. This requires the 'sql' OAuth scope.
+    if not statement_id:
+        return frame, status
+    execution = getattr(db, "statement_execution", None)
+    if not callable(getattr(execution, "get_statement", None)):
+        return frame, "sql_statement_api_unavailable"
+    try:
+        statement = execution.get_statement(statement_id=statement_id)
+        state = _field(_field(statement, "status"), "state")
+        state = str(getattr(state, "value", state) or "").upper()
+        if state in {"FAILED", "CANCELED", "CLOSED"}:
+            return frame, "sql_statement_" + state.lower()
+        if state in {"RUNNING", "PENDING"}:
+            return frame, "sql_statement_pending"
+        statement_frame, statement_status = read_response(
+            {"statement_response": statement}
+        )
+        if not statement_frame.empty:
+            return statement_frame, "sql_statement_rows_retrieved"
+        return statement_frame, "sql_statement_" + statement_status
     except Exception as exc:
-        # Never expose raw URL/auth/SQL/data through the UI diagnostic.
-        return frame, "raw_result_failed_" + type(exc).__name__
+        return frame, "sql_statement_fetch_failed_" + type(exc).__name__
 
 
 def ask_real_genie(question, *, conversation_id=None, scope=None,
@@ -249,8 +279,16 @@ def ask_real_genie(question, *, conversation_id=None, scope=None,
             )
             rows_status="missing_attachment_identifiers"
             if cid and mid and aid:
+                # The SQL statement ID is NOT the Genie attachment ID.
+                # Never mix them when calling the two distinct APIs.
+                from src.reported_genie_rows import _field
+                statement_id=(
+                    _field(query,"statement_id","statementId")
+                    or _field(_field(msg,"query_result"),"statement_id")
+                )
                 frame,rows_status=_verified_query_rows(
                     db,configured_space,cid,mid,aid,
+                    statement_id=statement_id,
                 )
             else:
                 # Only an actual SQL statement response counts as evidence.
