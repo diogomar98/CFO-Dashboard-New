@@ -21,6 +21,10 @@ on:
       - "src/reported_copilot_balloon.py"
       - "src/reported_genie_partner.py"
       - "setup/real_genie_uc_setup.py"
+      - "setup/real_genie_auto.py"
+      - "setup/ABN_REAL_GENIE_SETUP.py"
+      - "tests/test_real_genie_auto.py"
+      - "app.yaml.txt"
       - "setup/real_genie_agent_guide.md"
       - "setup/real_genie_trusted_queries.sql"
       - "main.py"
@@ -52,6 +56,6 @@ jobs:
       - name: Install minimum runtime packages for source-only checks
         run: python -m pip install "streamlit>=1.38" "pandas>=2.0"
       - name: Compile changed Python and original entry point
-        run: python -m py_compile main.py src/hud.py src/rag.py src/real_data_mode.py src/kpi_sparklines.py src/reported_brief.py src/reported_horizon.py src/reported_horizon_engine.py src/public_horizon_engine.py src/public_scenario_engine.py src/reported_scenario.py src/reported_copilot.py src/reported_copilot_evidence.py src/reported_copilot_partner.py src/reported_copilot_balloon.py src/reported_genie_partner.py setup/real_genie_uc_setup.py src/reported_news.py src/reported_news_partner.py main.py
+        run: python -m py_compile main.py src/hud.py src/rag.py src/real_data_mode.py src/kpi_sparklines.py src/reported_brief.py src/reported_horizon.py src/reported_horizon_engine.py src/public_horizon_engine.py src/public_scenario_engine.py src/reported_scenario.py src/reported_copilot.py src/reported_copilot_evidence.py src/reported_copilot_partner.py src/reported_copilot_balloon.py src/reported_genie_partner.py setup/real_genie_uc_setup.py setup/real_genie_auto.py setup/ABN_REAL_GENIE_SETUP.py src/reported_news.py src/reported_news_partner.py main.py
       - name: Test reported schema, factsheet reconciliation, and mode links
         run: python -m unittest discover -s tests -p "test_*.py" -v
