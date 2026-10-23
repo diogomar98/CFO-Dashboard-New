@@ -236,9 +236,9 @@ def render_reported_news(s):
     with st.expander("How is relevance defined?", expanded=False):
         st.markdown(
             "**High** — Direct possible strategic, regulatory, capital, risk or "
-            "control implications for ABN or a reported business line.\\n\\n"
+            "control implications for ABN or a reported business line.\n\n"
             "**Medium** — Plausible but indirect financial, operational or "
-            "sector connection.\\n\\n"
+            "sector connection.\n\n"
             "**Low** — Background, broad sector trends or sponsored themes "
             "without a specific immediate decision implication."
         )
