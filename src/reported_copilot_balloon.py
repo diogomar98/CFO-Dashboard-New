@@ -472,12 +472,21 @@ def _genie_provenance(item):
                 "zero_query_rows":"The generated SQL returned zero rows.",
                 "missing_statement_response":"Genie did not return a statement response with data rows.",
                 "missing_attachment_identifiers":"Genie did not provide the message/attachment IDs needed to fetch rows.",
+                "unknown_result_format":"Genie returned an SQL response without rows in a recognised field.",
+                "inline_rows_empty":"The API returned an empty inline data array; no rows could be confirmed.",
+                "missing_result_payload":"The API returned statement metadata but no result payload.",
+                "typed_result_parse_failed":"The API returned typed SQL cells that could not be parsed safely.",
+                "external_links_only":"SQL results are available through an external link, not inline.",
+                "result_column_count_mismatch":"Genie returned a row that does not match the reported SQL column schema.",
             }
             explanation=reasons.get(status)
-            if explanation is None and status.startswith("query_fetch_failed_"):
+            if explanation is None and status.startswith((
+                "query_fetch_failed_", "sdk_result_failed_",
+                "raw_result_failed_", "external_result_failed_"
+            )):
                 explanation=(
-                    "SQL results could not be retrieved through the Genie API. "
-                    "Error class: "+status.removeprefix("query_fetch_failed_")
+                    "The Genie API SQL-result retrieval failed. "
+                    "Diagnostic: "+status
                 )
             if explanation is None and status.startswith("external_result_failed_"):
                 explanation=(
