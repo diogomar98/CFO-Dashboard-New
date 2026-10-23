@@ -479,6 +479,13 @@ def _genie_provenance(item):
                     "SQL results could not be retrieved through the Genie API. "
                     "Error class: "+status.removeprefix("query_fetch_failed_")
                 )
+            if explanation is None and status.startswith("external_result_failed_"):
+                explanation=(
+                    "Genie generated the SQL, but this App could not download "
+                    "the signed result chunk. Check workspace network/egress "
+                    "policies and available Python dependencies. Error class: "
+                    +status.removeprefix("external_result_failed_")
+                )
             st.caption(
                 (explanation or "No SQL query-result rows were available.")
                 +" Numerical conclusions are not verified in this app."
