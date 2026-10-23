@@ -99,9 +99,10 @@ Genie's data:
 """
 
 
-def answer_data_question(user_question: str) -> dict:
+def answer_data_question(user_question: str, news_articles=None) -> dict:
     """Answer a natural-language data question by formulating a Genie question,
-    retrieving the data, and analyzing only that data into a final answer.
+    retrieving the data, and analyzing only that data into a CFO-ready answer,
+    supplemented by recent news context when available.
     """
     refined_question = generate(_build_formulate_prompt(user_question)).strip()
 
@@ -110,7 +111,25 @@ def answer_data_question(user_question: str) -> dict:
     genie_note = (genie_result.get("answer_text") or "").strip()
 
     if _has_data(data) or genie_note:
-        final_answer = generate(_build_analyze_prompt(user_question, genie_result)).strip()
+        prompt = _build_analyze_prompt(user_question, genie_result)
+        if news_articles:
+            import json
+            news_items = [
+                {
+                    "headline": a.get("headline", ""),
+                    "source": a.get("source", ""),
+                    "published": a.get("published", ""),
+                    "summary": a.get("summary", ""),
+                }
+                for a in news_articles[:8]
+            ]
+            prompt += (
+                "\n\nRECENT NEWS CONTEXT (narrative background only — not verified "
+                "financial data; use to add context to the Genie findings but never "
+                "as a source for specific figures or conclusions not in the data):\n"
+                + json.dumps(news_items, default=str, allow_nan=False)[:3000]
+            )
+        final_answer = generate(prompt).strip()
     else:
         final_answer = _NO_DATA_MESSAGE
 

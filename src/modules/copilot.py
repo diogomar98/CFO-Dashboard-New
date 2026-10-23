@@ -211,7 +211,9 @@ def _render_data_copilot():
 
         try:
             with st.spinner("Asking Genie…"):
-                result = answer_data_question(question)
+                from src.reported_news import recent_official_articles
+                articles, _ = recent_official_articles()
+                result = answer_data_question(question, news_articles=articles or None)
             data_messages.append(
                 {
                     "role": "assistant",
