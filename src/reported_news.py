@@ -8,7 +8,7 @@ from datetime import datetime, timezone
 import streamlit as st
 
 from src.hud import navigate_to_module, render_html
-from src.reported_brief import BRIEF_CSS, _official_article_card
+from src.reported_brief import BRIEF_CSS, _official_article_card, _prototype_article
 from src.public_horizon_engine import load_public_horizon_inputs
 from src.public_scenario_engine import NEUTRAL_INPUTS
 from src.reported_news_partner import (
@@ -16,6 +16,7 @@ from src.reported_news_partner import (
     fetch_ecb_rate_events, verified_rate_scenario, load_official_news_snapshot,
     load_curated_bank_news, REPORTED_NEWS_SEGMENTS, RELEVANCE_LEVELS,
 )
+from src.reported_news_signals import COUNTRIES, load_prototype_news_signals
 
 
 @st.cache_data(ttl=1800,show_spinner=False)
@@ -70,7 +71,7 @@ def _effective_news_assessment(article, model_result=None):
             "reason":ai.get("reason") if agreed and ai.get("reason")
                      else article.get("editorial_reason",""),
             "confidence":ai.get("confidence") if agreed else None,
-            "relevance_origin":"Editorial review",
+            "relevance_origin":article.get("relevance_origin","Editorial review"),
             "ai_agrees":bool(agreed),
         }
     if ai.get("relevance") in RELEVANCE_LEVELS:
@@ -81,13 +82,21 @@ def _effective_news_assessment(article, model_result=None):
 
 
 def filter_financial_news(articles, assessments, relevance="All",
-                          segment="All segments"):
+                          segment="All segments", country="All countries",
+                          metric="All metrics", direction="All directions"):
     """AND-combined relevance and *exact* published-business-line filters."""
     valid_filters=("All","High","Medium","Low","Not assessed")
     if relevance not in valid_filters:
         raise ValueError("Unknown relevance filter")
     if segment!="All segments" and segment not in REPORTED_NEWS_SEGMENTS:
         raise ValueError("Unknown reported segment")
+    if country!="All countries" and country not in COUNTRIES:
+        raise ValueError("Unknown country filter")
+    if direction not in ("All directions","Positive","Negative","Mixed"):
+        raise ValueError("Unknown impact direction")
+    available_metrics={a.get("primary_affected_metric") for a in articles}
+    if metric!="All metrics" and metric not in available_metrics:
+        raise ValueError("Unknown financial metric filter")
     wanted=relevance.upper()
     filtered=[]
     for article in articles:
@@ -98,6 +107,12 @@ def filter_financial_news(articles, assessments, relevance="All",
         ):
             continue
         if segment!="All segments" and segment not in article.get("segments",[]):
+            continue
+        if country!="All countries" and country!=article.get("country"):
+            continue
+        if metric!="All metrics" and metric!=article.get("primary_affected_metric"):
+            continue
+        if direction!="All directions" and direction!=article.get("impact_direction"):
             continue
         filtered.append(article)
     return filtered
@@ -181,8 +196,40 @@ def _queue_rate_scenario(evidence):
 
 
 def _card(article, classification, *, saved=False):
-    """Same original coloured external-news card as Synthetic Morning Brief."""
-    return _official_article_card(article,classification,saved=saved)
+    """Preserve Synthetic/Real news card CSS and colours for both source types."""
+    if not article.get("prototype"):
+        return _official_article_card(article,classification,saved=saved)
+    # The submitted CSV is unverified prototype input. Never misrepresent
+    # scores as measured ABN exposure, AI confidence, or publisher validation.
+    level=classification.get("relevance","UNRATED")
+    marker="Prototype assessment · "+article.get("country","Unknown")
+    html_card=_prototype_article({
+        "news_origin":"official",
+        "ai_assessed":"no",
+        "relevance_origin":"Prototype classification",
+        "category":marker+" · "+article.get("category","Uncategorised"),
+        "headline":article["headline"],
+        "source":article["source"],
+        "published_date":article["published"],
+        "source_url":article["url"],
+        "bank_impact_summary":article.get("bank_impact_summary") or article["summary"],
+        "primary_affected_metric":article.get("primary_affected_metric","Not assessed"),
+        "potential_impact_level":level,
+        "segments":article.get("segments",[]),
+        # Never show the user-provided 0.99 confidence as verified certainty.
+        "confidence_score":None,
+        "source_note":(
+            "User-supplied synthetic prototype classification; article claims, "
+            "impact scores and business-line matching are unverified."
+        ),
+    })
+    return html_card.replace(
+        "<strong>Official excerpt</strong>",
+        "<strong>Prototype assessment (unverified)</strong>",
+    ).replace(
+        "<strong>Potential business lines</strong>",
+        "<strong>Illustrative business lines</strong>",
+    )
 
 
 
@@ -200,6 +247,7 @@ NEWS_SCROLL_CSS = """
 .rn-news-scroll .rb-news-grid {display:block;}
 .rn-news-scroll .rb-news-item {padding:14px 12px 14px 8px !important;}
 .rn-subtle {font-size:.72rem;color:#A1BBA8;line-height:1.45;}
+.rn-country-title {font-size:.83rem;font-weight:800;color:#B3EABF;border-bottom:1px solid rgba(93,170,119,.35);padding:12px 0 7px;margin:8px 0 10px;letter-spacing:.03em;}
 </style>
 """
 
@@ -208,24 +256,62 @@ def render_reported_news(s):
     """Source-linked offline financial news and existing AI relevance, concise UI."""
     render_html(BRIEF_CSS+NEWS_SCROLL_CSS)
     st.markdown("### Financial News Intelligence")
-    articles,warnings,status=recent_official_articles(include_status=True)
+    source_choice=st.selectbox(
+        "News source",
+        ["Country news signals · prototype", "Reviewed publisher selection"],
+        key="rn_source_choice",
+        help=(
+            "Prototype: 26 user-supplied, unverified signals grouped by country. "
+            "Reviewed: the previous publisher-linked curation."
+        ),
+    )
+    is_prototype=source_choice.startswith("Country")
+    if is_prototype:
+        articles,status=load_prototype_news_signals()
+        warnings=[]
+    else:
+        articles,warnings,status=recent_official_articles(include_status=True)
     if not articles:
-        st.warning("No verified news catalogue is installed. Check data/abn_news_curated.json.")
+        st.warning("Selected news catalogue is unavailable. Check data/news_signals.csv or data/abn_news_curated.json.")
         return
     from src.hud import navigate_to_module
-    with st.spinner("Ranking verified headlines with Jarvis AI…"):
-        classified,ai_error=official_article_classifications(articles)
+    if is_prototype:
+        # These are precomputed, synthetic/unverified relevance grades.
+        # Do not call AI on them or mislabel them as independently reviewed.
+        classified={article["id"]:_effective_news_assessment(article)
+                    for article in articles}
+        ai_error=None
+    else:
+        with st.spinner("Ranking verified headlines with Jarvis AI…"):
+            classified,ai_error=official_article_classifications(articles)
     c1,c2,c3=st.columns(3)
-    c1.metric("Curated articles",len(articles))
+    c1.metric("News signals" if is_prototype else "Curated articles",len(articles))
     c2.metric(
         "High relevance",
         sum(classified.get(a["id"],{}).get("relevance")=="HIGH"
             for a in articles),
     )
     c3.metric("Publishers",len({a["source"].split(" · ")[0] for a in articles}))
-    note="Verified publisher links · saved selection as of "+status.get(
-        "retrieved_at_utc","unknown")[:10]+". Not a live feed."
-    st.caption(note)
+    if is_prototype:
+        st.warning(
+            "PROTOTYPE NEWS INTELLIGENCE — headlines, statistics, relevance "
+            "scores, confidence and suggested financial impacts come from the "
+            "supplied CSV and have NOT been independently verified. Country "
+            "and business-line tags are illustrative, not demonstrated ABN exposures. "
+            "Do not treat these as confirmed news, CFO actions or model inputs."
+        )
+        st.caption(
+            "User-provided snapshot · not live · 26 signals · country profiles "
+            "NL / DE / FR / BE / Europe. No model-calibrated confidence."
+        )
+        st.caption("Country split: "+" · ".join(
+            label+" "+str(sum(a.get("country")==label for a in articles))
+            for label in COUNTRIES
+        ))
+    else:
+        note="Verified publisher links · saved selection as of "+status.get(
+            "retrieved_at_utc","unknown")[:10]+". Not a live feed."
+        st.caption(note)
     if ai_error:
         st.caption("AI commentary was partly unavailable; reviewed relevance and segment filters still work.")
     if warnings:
@@ -243,27 +329,49 @@ def render_reported_news(s):
             "without a specific immediate decision implication."
         )
         st.caption(
+            "Prototype relevance is taken from the supplied CSV and NOT "
+            "independently reviewed." if is_prototype else
             "Reviewed from linked headlines and short summaries, not full "
             "publisher articles. Business-line tags indicate possible relevance, "
             "not proven exposure. Optional AI confidence is an uncalibrated "
             "agreement assessment—not a probability of actual bank impact."
         )
-    filter_left,filter_right=st.columns(2,gap="medium")
-    with filter_left:
+    filter_country,filter_relevance,filter_segment=st.columns(3,gap="small")
+    with filter_country:
+        selected_country=st.selectbox(
+            "Country",["All countries"]+list(COUNTRIES),
+            key="rn_filter_country",disabled=not is_prototype,
+        )
+    with filter_relevance:
         selected_relevance=st.selectbox(
-            "Relevance",
-            ["All","High","Medium","Low","Not assessed"],
+            "Relevance",["All","High","Medium","Low","Not assessed"],
             key="rn_filter_relevance",
         )
-    with filter_right:
+    with filter_segment:
         selected_segment=st.selectbox(
-            "Business segment",
-            ["All segments"]+list(REPORTED_NEWS_SEGMENTS),
+            "Business segment",["All segments"]+list(REPORTED_NEWS_SEGMENTS),
             key="rn_filter_segment",
+        )
+    by_metric,by_direction=st.columns(2,gap="medium")
+    with by_metric:
+        selected_metric=st.selectbox(
+            "Financial metric",["All metrics"]+sorted({
+                a["primary_affected_metric"] for a in articles
+                if a.get("primary_affected_metric")
+            }),
+            key="rn_filter_metric",disabled=not is_prototype,
+        )
+    with by_direction:
+        selected_direction=st.selectbox(
+            "Impact direction",["All directions","Positive","Negative","Mixed"],
+            key="rn_filter_direction",disabled=not is_prototype,
         )
     visible=filter_financial_news(
         articles,classified,relevance=selected_relevance,
         segment=selected_segment,
+        country=selected_country if is_prototype else "All countries",
+        metric=selected_metric if is_prototype else "All metrics",
+        direction=selected_direction if is_prototype else "All directions",
     )
     st.caption(f"Showing {len(visible)} of {len(articles)} articles · "
                "relevance and segment filters are combined")
@@ -273,17 +381,76 @@ def render_reported_news(s):
         # One controlled div owns the scrollbar; compatible with older
         # Streamlit (st.container(height=) is unavailable in ABN).
         if not visible:
-            st.info("No articles match those filters. Select All relevance or All segments.")
+            st.info("No articles match the selected filters. Broaden the country, relevance, business-line or metric selection.")
         else:
-            card_html="".join(
-                '<div class="rb-news-grid">'+_card(
-                    article,classified.get(article["id"],{}),saved=True,
-                )+'</div>'
-                for article in visible
-            )
+            if is_prototype:
+                # Group each country's cards under a visible geographic heading.
+                groups=[]
+                visible_countries=(
+                    [selected_country] if selected_country!="All countries"
+                    else list(COUNTRIES)
+                )
+                for country in visible_countries:
+                    subset=[a for a in visible if a.get("country")==country]
+                    if not subset:
+                        continue
+                    groups.append(
+                        '<div class="rn-country-title">'+
+                        html.escape(country)+" · "+str(len(subset))+
+                        ' signals</div><div class="rb-news-grid">'+
+                        "".join(_card(a,classified.get(a["id"],{}),saved=True)
+                                for a in subset)+
+                        '</div>'
+                    )
+                card_html="".join(groups)
+            else:
+                card_html="".join(
+                    '<div class="rb-news-grid">'+_card(
+                        article,classified.get(article["id"],{}),saved=True,
+                    )+'</div>'
+                    for article in visible
+                )
             render_html('<section class="rn-news-scroll" aria-label="Scrollable financial news">'
                         +card_html+'</section>')
     with aside:
+        if is_prototype and visible:
+            st.markdown("#### Signal details")
+            selected_id=st.selectbox(
+                "Inspect news signal",
+                [a["id"] for a in visible],
+                format_func=lambda item:next(
+                    (a["country"]+" · "+a["headline"][:52] for a in visible
+                     if a["id"]==item),item
+                ),
+                key="rn_selected_signal",
+            )
+            chosen=next(a for a in visible if a["id"]==selected_id)
+            st.caption(
+                chosen["country"]+" · "+chosen["impact_direction"]+
+                " · "+chosen["editorial_relevance"]+" prototype relevance"
+            )
+            st.markdown("**Potential financial interpretation (prototype)**")
+            st.write(chosen["bank_impact_summary"] or "Not supplied.")
+            st.markdown("**Affected metrics**")
+            st.write(" · ".join([chosen["primary_affected_metric"]]+
+                     chosen["secondary_metrics"]))
+            st.markdown("**Suggested action (unverified)**")
+            st.write(chosen["suggested_action"] or "Not supplied.")
+            st.markdown("**Scenario association (informational only)**")
+            st.caption(
+                (chosen["linked_scenario"] or "None")+
+                " · "+(chosen["scenario_status"] or "Not supplied")+
+                " · No automatic model inputs are generated."
+            )
+            with st.expander("Prototype scores and provenance"):
+                st.write("Relevance score: "+
+                         str(chosen["relevance_score"])+"/100 (unvalidated)")
+                st.write("Confidence score: "+
+                         str(chosen["confidence_score"])+
+                         " (user-supplied, uncalibrated)")
+                st.write(chosen["classification_method"])
+                st.write("Country from geo_profile: "+chosen["geo_profile"])
+                st.write("Business-line tags: illustrative keyword mapping")
         st.markdown("#### From news to What-If")
         st.write(
             "News informs potential financial drivers. The Real Data model "
@@ -297,8 +464,16 @@ def render_reported_news(s):
         if st.button("Open What-If →",key="rn_manual_scenario",use_container_width=True):
             navigate_to_module("scenario")
         st.markdown("#### Source coverage")
-        st.caption(
-            "Bloomberg, Financial Times, Yahoo Finance, FD partner content "
-            "and Dutch banking coverage. Some sources may require subscriptions. "
-            "The FD partner item is sponsored, not independent reporting."
-        )
+        if is_prototype:
+            st.caption(
+                "User-supplied sources span Netherlands, Germany, France, "
+                "Belgium and European-level reporting. Link validity and "
+                "claimed statistics have not been verified. Some sources "
+                "are secondary, commentary or non-official publishers."
+            )
+        else:
+            st.caption(
+                "Bloomberg, Financial Times, Yahoo Finance, FD partner content "
+                "and Dutch banking coverage. Some sources may require subscriptions. "
+                "The FD partner item is sponsored, not independent reporting."
+            )
