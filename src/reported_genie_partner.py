@@ -18,6 +18,29 @@ MAX_QUESTION_LENGTH = 1200
 MAX_RETURNED_ROWS = 50
 MAX_ANALYSIS_CHARS = 22000
 
+_REFORMULATE_PROMPT = (
+    "You are a query-formulation assistant for a text-to-SQL data agent called "
+    "Genie that queries ABN AMRO financial data from Unity Catalog reporting views. "
+    "Genie sees only a single natural-language question — it has no memory of prior "
+    "turns and writes its own SQL.\n\n"
+    "Rewrite the user's question below into ONE single, precise, self-contained "
+    "natural-language question that Genie can answer directly from the data warehouse.\n\n"
+    "Rules:\n"
+    "1. Output ONLY the rewritten question. No preamble, no explanation, no quotes.\n"
+    "2. Do not write SQL yourself — Genie writes the SQL.\n"
+    "3. Preserve the user's intent exactly. Do not narrow, broaden, or add assumptions.\n"
+    "4. If the question is already single, precise, and self-contained, return it unchanged.\n"
+)
+
+
+def _reformulate_for_genie(question: str, responder) -> str:
+    """Use OpenAI to package the question for Genie; fall back to original on error."""
+    try:
+        refined = str(responder(f"{_REFORMULATE_PROMPT}\n\nUser question:\n{question}")).strip()
+        return refined if refined else question
+    except Exception:
+        return question
+
 
 def real_genie_space_id():
     """Require a distinct deployment ID; never accidentally reuse Synthetic."""
@@ -327,19 +350,19 @@ def ask_real_genie(question, *, conversation_id=None, scope=None,
 
 def answer_real_genie_question(question, *, scope=None, conversation_id=None,
                                ask=None, generate=None):
-    """Optional corporate AI interpretation ONLY of retrieved Genie evidence.
-
-    If there are no rows, Genie's unverified text is displayed directly with
-    an explicit caveat; never ask the LLM to fill in missing numbers.
+    """OpenAI reformulates the question for Genie, Genie queries Unity Catalog,
+    then OpenAI interprets the returned rows into a CFO-ready answer.
     """
     prompt=_validate_question(question)
     fetch=ask if ask is not None else ask_real_genie
-    result=fetch(prompt,scope=scope,conversation_id=conversation_id)
+    from src.openai_partner import generate_prompt_response
+    responder=generate if generate is not None else generate_prompt_response
+    refined_prompt=_reformulate_for_genie(prompt, responder)
+    result=fetch(refined_prompt,scope=scope,conversation_id=conversation_id)
     data=result.get("data")
     has_rows=isinstance(data,pd.DataFrame) and not data.empty
     narrative=str(result.get("answer_text") or "").strip()
     if has_rows:
-        from src.openai_partner import generate_prompt_response
         import json
         records=data.head(MAX_RETURNED_ROWS).astype(object).where(
             pd.notna(data.head(MAX_RETURNED_ROWS)),None,
@@ -368,7 +391,6 @@ def answer_real_genie_question(question, *, scope=None, conversation_id=None,
             "Return a concise financial answer.\nRETRIEVED EVIDENCE JSON:\n"
             +json.dumps(evidence,default=str,allow_nan=False)[:MAX_ANALYSIS_CHARS]
         )
-        responder=generate if generate is not None else generate_prompt_response
         try:
             answer=str(responder(instructions)).strip()
         except Exception:
