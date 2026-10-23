@@ -4,7 +4,7 @@ The complete approved ABN target is already built into the source code:
 
 | Setting | Preconfigured value |
 |---|---|
-| Unity Catalog | `frbg3as_studio_a` |
+| Unity Catalog | `frbg3s_studio_a` |
 | Schema | `cfo_cockpit` |
 | SQL warehouse ID | `7405605052754358` |
 | Real Genie Agent name | `ABN CFO Cockpit — Real Reported Data` |
@@ -20,7 +20,7 @@ The complete approved ABN target is already built into the source code:
    reporting extracts. Do not change any Synthetic source files.
 2. **Open `setup/ABN_REAL_GENIE_SETUP.py` as a Databricks Python notebook**,
    attach compute that can create tables in your approved existing
-   `frbg3as_studio_a.cfo_cockpit` schema, and click **Run All once**. No widget,
+   `frbg3s_studio_a.cfo_cockpit` schema, and click **Run All once**. No widget,
    hardcoded code edits or pasted SQL are required.
    - Creates the three source-backed Unity Catalog reporting tables if absent,
      with 10 Group rows, 28 segment rows and 22 historical NII/NIM rows.
