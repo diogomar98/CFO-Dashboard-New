@@ -19,9 +19,6 @@ import os
 import re
 
 import pandas as pd
-from pyspark.sql.types import (
-    DateType, DoubleType, StringType, StructField, StructType,
-)
 
 SOURCE_NAMES = {
     "cfo_group_quarterly": "abn_quarterly.csv",
@@ -130,6 +127,10 @@ def _load(name,source_dir):
 
 
 def _schema(name):
+    # Keep source validation usable outside Databricks (e.g. CI) without Spark.
+    from pyspark.sql.types import (
+        DateType, DoubleType, StringType, StructField, StructType,
+    )
     fields=[StructField("date",DateType(),False)]
     if name=="cfo_segment_quarterly":
         fields.append(StructField("business_line",StringType(),False))
@@ -176,7 +177,6 @@ def prepare_source_tables(spark, *,catalog, schema,source_dir):
             raise FileExistsError(
                 f"{target} already exists. Review it before any explicit refresh."
             )
-        from pyspark.sql import Row
         source=spark.createDataFrame(
             list(_to_rows(name,frame)),schema=_schema(name),
         )
