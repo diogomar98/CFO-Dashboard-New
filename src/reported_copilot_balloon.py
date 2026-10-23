@@ -17,6 +17,9 @@ from src.reported_copilot_evidence import build_reported_evidence
 from src.reported_copilot_partner import (
     DEFAULT_QUESTION, answer_reported_question, build_cet1_bridge,
 )
+from src.reported_genie_partner import (
+    answer_real_genie_question, real_genie_configured,
+)
 
 
 BALLOON_CSS = """
@@ -175,6 +178,36 @@ MAX_CONVERSATIONS = 12
 MAX_STORED_MESSAGES = 24
 
 
+def _genie_evidence(evidence, method):
+    """Keep distinct, 36-hour threads for SQL Genie vs source-packet AI."""
+    if method!="genie":
+        return evidence
+    return dict(evidence,topic="Real Genie · "+evidence["topic"])
+
+
+def _answer_method(*,compact):
+    """Explicit opt-in: the synthetic Genie agent is never a fallback."""
+    label="Answer using"
+    mode=st.selectbox(
+        label,
+        ["Reported factsheet · AI", "Real Data Genie · SQL"],
+        key="jarvis_method" if compact else "real_cfo_method",
+        help=(
+            "Factsheet AI uses the uploaded financial figures; "
+            "Real Genie uses only the separately configured Unity Catalog "
+            "agent with inspectable SQL and query rows."
+        ),
+    )
+    if mode.startswith("Real Data Genie") and not real_genie_configured():
+        st.caption(
+            "Real Genie is not configured yet. Create the Real Data Genie "
+            "Agent, attach the approved Unity Catalog reporting tables and "
+            "set REAL_GENIE_SPACE_ID for this Databricks App. "
+            "No Synthetic agent is used."
+        )
+    return "genie" if mode.startswith("Real Data Genie") else "factsheet"
+
+
 def _valid_threads(threads, now):
     """Pure TTL pruning; last activity refreshes a conversation's expiry."""
     keep = []
@@ -240,7 +273,8 @@ def _conversation_picker(evidence, *, compact=False):
     active=st.session_state.get(ACTIVE_KEY)
     ids=[thread["id"] for thread in threads]
     labels={t["id"]:t["title"] for t in threads}
-    key="jarvis_history_select" if compact else "real_cfo_history_select"
+    method_tag="genie" if "Real Genie" in evidence.get("topic","") else "factsheet"
+    key=("jarvis_history_select_" if compact else "real_cfo_history_select_")+method_tag
     # Widget keys are synced before rendering to avoid stale previous choices.
     if st.session_state.get(key) not in ids:
         st.session_state[key]=active if active in ids else ids[0]
@@ -355,45 +389,94 @@ def _get_thread(evidence):
     return current["messages"]
 
 
-def _send(question,evidence,history):
-    """Carry bounded verified-evidence chat context into each gateway call."""
+def _send(question,evidence,history,*,method="factsheet"):
+    """Choose independent source-backed factsheet or governed Genie SQL."""
     question=question.strip()
     if not question or len(question)>1200:
         st.warning("Ask one question of at most 1,200 characters.")
         return
     previous=list(history)
-    with st.spinner("Investigating the reported figures…"):
+    thread=next((t for t in st.session_state.get(THREADS_KEY,[])
+                 if t["id"]==st.session_state.get(ACTIVE_KEY)),None)
+    with st.spinner(
+        "Querying approved Real Genie data…" if method=="genie"
+        else "Investigating the reported figures…"
+    ):
         try:
-            result=answer_reported_question(question,evidence,history=previous)
+            if method=="genie":
+                if not real_genie_configured():
+                    st.warning("Set REAL_GENIE_SPACE_ID for the new Real Data Genie Agent.")
+                    return
+                result=answer_real_genie_question(
+                    question,scope=evidence["scope"],
+                    conversation_id=thread.get("genie_conversation_id") if thread else None,
+                )
+            else:
+                result=answer_reported_question(
+                    question,evidence,history=previous,
+                )
         except Exception as exc:
-            # Avoid leaking authorization headers, URLs, token values or body.
+            # Never expose Genie SQL, credentials, user proxy headers or
+            # internal financial records through a raw exception.
             st.error(
-                "The existing ABN AI Gateway could not answer this question. "
+                "The Real Genie Agent could not be queried. Check its ID, "
+                "CAN RUN permission, warehouse and table grants."
+                if method=="genie" else
+                "The existing ABN AI Gateway could not answer the question. "
                 "No synthetic data was substituted."
             )
             st.caption(f"Error class: {type(exc).__name__}")
             return
+    assistant={
+        "role":"assistant","content":result["answer"],
+        "source":result["source"],
+        "used_genie":method=="genie",
+    }
+    if method=="genie":
+        assistant["sql"]=result.get("sql")
+        assistant["data"]=result.get("data")
+        assistant["has_rows"]=result.get("has_rows",False)
+        if thread:
+            thread["genie_conversation_id"]=result.get("conversation_id")
     history.extend([
-        {"role":"user","content":question},
-        {"role":"assistant","content":result["answer"],"source":result["source"]},
+        {"role":"user","content":question},assistant,
     ])
     if len(history)>MAX_STORED_MESSAGES:
         del history[:-MAX_STORED_MESSAGES]
     now=time.time()
-    active=st.session_state.get(ACTIVE_KEY)
-    for thread in st.session_state.get(THREADS_KEY,[]):
-        if thread["id"]==active:
-            thread["updated_at"]=now
-            if thread["title"]=="New financial question":
-                thread["title"]=question[:46]+("…" if len(question)>46 else "")
-            break
-    # A rerun restores the shared thread; Jarvis remains open in session state.
+    if thread:
+        thread["updated_at"]=now
+        if thread["title"]=="New financial question":
+            thread["title"]=question[:46]+("…" if len(question)>46 else "")
     st.rerun()
+
+
+def _genie_provenance(item):
+    """Keep generated SQL, exact returned data and limitations inspectable."""
+    if not item.get("used_genie"):
+        return
+    st.caption("Real Data Genie · governed Unity Catalog views · read-only")
+    with st.expander("Inspect Genie SQL and retrieved source rows",expanded=False):
+        if item.get("sql"):
+            st.code(item["sql"],language="sql")
+        else:
+            st.caption("Genie did not return a SQL attachment.")
+        data=item.get("data")
+        if isinstance(data,pd.DataFrame) and not data.empty:
+            st.dataframe(data,use_container_width=True,hide_index=True)
+        else:
+            st.caption(
+                "No query-result rows were available for verification. "
+                "Do not rely on unconfirmed numerical claims."
+            )
+
 
 
 def render_cet1_chat(evidence, *, compact=True):
     """Dedicated Ask CFO Copilot route; now supports any sourced finance question."""
-    history=_get_thread(evidence)
+    method=_answer_method(compact=False)
+    chat_evidence=_genie_evidence(evidence,method)
+    history=_get_thread(chat_evidence)
     st.caption("Ask about capital, profitability, liquidity, segments or reported trends. "
                "Unavailable business causes and figures are identified, not invented.")
     left,right=st.columns([2,1])
@@ -404,8 +487,8 @@ def render_cet1_chat(evidence, *, compact=True):
         clear=st.button("New conversation",key="real_cfo_clear_"+str(compact),
                         use_container_width=True)
     if clear:
-        _new_conversation(evidence)
-    _conversation_picker(evidence,compact=False)
+        _new_conversation(chat_evidence)
+    _conversation_picker(chat_evidence,compact=False)
     # The dedicated central view previously placed the composer over replies.
     # A marked, max-height scroll container keeps all replies fully accessible
     # even in the ABN runtime without st.container(height=).
@@ -418,9 +501,12 @@ def render_cet1_chat(evidence, *, compact=True):
             with st.chat_message(item["role"], avatar="🤖" if item["role"]=="assistant" else "🧑‍💼"):
                 st.markdown(item["content"])
                 if item["role"]=="assistant":
-                    st.caption("Model interpretation · factsheet figures are authoritative")
-                    if index==len(visible)-1:
-                        _show_answer_visual(evidence,history)
+                    if item.get("used_genie"):
+                        _genie_provenance(item)
+                    else:
+                        st.caption("Model interpretation · factsheet figures are authoritative")
+                        if index==len(visible)-1:
+                            _show_answer_visual(evidence,history)
     st.divider()
     with st.form("real_cfo_chat_form_"+str(compact),clear_on_submit=True):
         question=st.text_area(
@@ -431,9 +517,9 @@ def render_cet1_chat(evidence, *, compact=True):
         )
         asked=st.form_submit_button("Send question",use_container_width=True)
     if start:
-        _send(DEFAULT_QUESTION,evidence,history)
+        _send(DEFAULT_QUESTION,evidence,history,method=method)
     elif asked and question.strip():
-        _send(question,evidence,history)
+        _send(question,evidence,history,method=method)
 
 
 def _show_answer_visual(evidence,history):
@@ -492,9 +578,9 @@ def _show_answer_visual(evidence,history):
         st.caption("Published observations only · source: ABN AMRO quarterly factsheets.")
 
 
-def _render_jarvis_conversation(evidence):
-    """Larger Jarvis chat; message history and normal-flow input are siblings."""
-    history=_get_thread(evidence)
+def _render_jarvis_conversation(evidence,*,method="factsheet"):
+    """Larger Jarvis chat; SQL Genie is opt-in, not a Synthetic fallback."""
+    history=_get_thread(_genie_evidence(evidence,method))
     queued=st.session_state.pop("real_cfo_question_compact",None)
     if queued:
         st.session_state["jarvis_composer_text"]=queued
@@ -505,15 +591,18 @@ def _render_jarvis_conversation(evidence):
             st.info("Type your first question in **Ask Jarvis** below; answers will appear here.")
             if st.button("Investigate Q2 CET1",key="jarvis_first_investigation",
                          use_container_width=True):
-                _send(DEFAULT_QUESTION,evidence,history)
+                _send(DEFAULT_QUESTION,evidence,history,method=method)
         visible=history[-16:]
         for index,item in enumerate(visible):
             with st.chat_message(item["role"], avatar="🤖" if item["role"]=="assistant" else "🧑‍💼"):
                 st.markdown(item["content"])
                 if item["role"]=="assistant":
-                    st.caption("AI interpretation · reported evidence only")
-                    if index==len(visible)-1:
-                        _show_answer_visual(evidence,history)
+                    if item.get("used_genie"):
+                        _genie_provenance(item)
+                    else:
+                        st.caption("AI interpretation · reported evidence only")
+                        if index==len(visible)-1:
+                            _show_answer_visual(evidence,history)
 
     # Separate normal-flow form after bounded chat. It does not cover messages.
     with st.form("jarvis_composer_form",clear_on_submit=True):
@@ -524,7 +613,7 @@ def _render_jarvis_conversation(evidence):
         )
         asked=st.form_submit_button("Send to Jarvis →",use_container_width=True)
     if asked and question.strip():
-        _send(question,evidence,history)
+        _send(question,evidence,history,method=method)
 
 
 def render_floating_copilot(s):
@@ -562,16 +651,18 @@ def render_floating_copilot(s):
 
         try:
             evidence=build_reported_evidence(s,"All reported metrics")
-            _get_thread(evidence)
+            method=_answer_method(compact=True)
+            chat_evidence=_genie_evidence(evidence,method)
+            _get_thread(chat_evidence)
             if new:
-                _new_conversation(evidence)
+                _new_conversation(chat_evidence)
             with st.expander("🕘 Conversation history · 36h",expanded=False):
-                _conversation_picker(evidence,compact=True)
+                _conversation_picker(chat_evidence,compact=True)
                 st.caption(
                     "History is kept for up to 36 hours while this Streamlit "
                     "session is active. Closing the browser or app restart "
                     "may clear it; no shared database is used."
                 )
-            _render_jarvis_conversation(evidence)
+            _render_jarvis_conversation(evidence,method=method)
         except (ValueError,FileNotFoundError):
             st.error("Reported financial evidence is unavailable; Jarvis cannot answer.")
