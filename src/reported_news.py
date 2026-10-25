@@ -53,6 +53,24 @@ def recent_official_articles(*, include_status=False):
     return ([],warnings,{"mode":"none","count":0}) if include_status else ([],warnings)
 
 
+@st.cache_data(ttl=3600,show_spinner=False)
+def load_real_data_rate_signals():
+    """OpenAI-extracted concrete rate signals from the curated news selection.
+
+    Returned dicts contain: value_bps, confidence, quote, headline, source,
+    published, article_id, article_url. Returns an empty list when no articles
+    are available or when no quantitative rate signals are found.
+    """
+    from src.reported_news_partner import extract_rate_signals_from_articles
+    articles,_=recent_official_articles()
+    if not articles:
+        return []
+    try:
+        return extract_rate_signals_from_articles(articles)
+    except Exception:
+        return []
+
+
 def _effective_news_assessment(article, model_result=None):
     """Reviewed relevance governs curated selections; AI is optional context.
 

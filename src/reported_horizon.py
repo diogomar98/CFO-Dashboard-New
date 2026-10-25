@@ -14,6 +14,7 @@ from src.hud import module_url, render_html
 from src.public_horizon_engine import (
     load_public_horizon_inputs, build_public_horizon, CRITICAL_VALUES,
 )
+from src.reported_news import load_real_data_rate_signals
 
 HORIZON_CSS = """
 <style>
@@ -73,8 +74,13 @@ def _card(label, value, detail, *, actual=False):
 
 
 
-def _forecast_chart(history, metric="nim_pct", history_points=12, bands="Both"):
-    """Synthetic-style green actuals, dashed purple forecast, 90/95 shaded bands."""
+def _forecast_chart(history, metric="nim_pct", history_points=12, bands="Both",
+                    signal_trajectory=None):
+    """Synthetic-style green actuals, dashed purple forecast, 90/95 shaded bands.
+
+    When signal_trajectory is provided an additional amber dashed line is drawn
+    showing how the forecast changes under the selected news rate signal.
+    """
     if metric not in ("nim_pct", "nii_m"):
         raise ValueError("This public forecast supports only cross-checked Group NIM/NII.")
     field_label = "NIM (%)" if metric == "nim_pct" else "Net interest income (€m)"
@@ -88,6 +94,10 @@ def _forecast_chart(history, metric="nim_pct", history_points=12, bands="Both"):
     baseline = pd.concat([bridge, projected], ignore_index=True)
     order = pd.concat([actual, projected])["quarter"].tolist()
     band_values = [actual[metric], projected[metric]]
+    if signal_trajectory is not None:
+        sig_proj=signal_trajectory[signal_trajectory["series"]=="Baseline"]
+        if not sig_proj.empty:
+            band_values.append(sig_proj[metric])
     for level in (90, 95):
         if bands == "Both" or bands == str(level)+"%":
             band_values.extend([
@@ -145,9 +155,23 @@ def _forecast_chart(history, metric="nim_pct", history_points=12, bands="Both"):
     dots2=alt.Chart(projected).mark_point(
         filled=True,color="#110C17",stroke="#CFB9FF",strokeWidth=2,size=72
     ).encode(x=x,y=y,tooltip=future_tooltips)
+    signal_layers=[]
+    if signal_trajectory is not None:
+        sig_proj=signal_trajectory[signal_trajectory["series"]=="Baseline"].copy()
+        if not sig_proj.empty:
+            sig_bridge=actual.tail(1).copy()
+            sig_line_data=pd.concat([sig_bridge,sig_proj],ignore_index=True)
+            signal_layers.append(
+                alt.Chart(sig_line_data).mark_line(
+                    color="#F5A623",strokeWidth=2.5,strokeDash=[5,4]
+                ).encode(x=x,y=y,tooltip=[
+                    alt.Tooltip("quarter:N",title="Forecast quarter"),
+                    alt.Tooltip(f"{metric}:Q",title=f"Signal {field_label}",format=fmt),
+                ])
+            )
     # Use a FLAT layer list: this avoids nested Vega-Lite layers and makes
     # both 90/95 confidence bands independently inspectable.
-    chart=alt.layer(*(band_layers+[line1,dots1,line2,dots2]))
+    chart=alt.layer(*(band_layers+[line1,dots1,line2,dots2]+signal_layers))
     return chart.properties(height=350).configure_view(
         strokeOpacity=0
     ).configure(background="#08100C")
@@ -295,8 +319,9 @@ def render_reported_horizon(s):
         st.error("Source check failed: " + str(exc))
         st.caption("Do not substitute the Synthetic financial datasets.")
         return
+    news_signals=load_real_data_rate_signals()
     # Horizon always displays the automatically selected, unshocked public
-    # baseline. ECB shocks and direct financial overlays belong in What-If.
+    # baseline. An optional news rate signal can be overlaid on the chart.
     try:
         trajectory,model=build_public_horizon(public,model_preference="auto")
     except (ValueError,OverflowError,ArithmeticError) as exc:
@@ -341,24 +366,68 @@ def render_reported_horizon(s):
             scope=st.selectbox("Reported history",["Latest 12 quarters","All 22 quarters"],
                                key="rh_public_history")
         metric=("nim_pct" if selection=="Net interest margin" else "nii_m")
-        render_html(
+        active_signal=None
+        if news_signals:
+            sign=lambda v: f"+{v}" if v>0 else str(v)
+            signal_opts=["Neutral (no signal)"]+[
+                f"{sign(s['value_bps'])} bps · {s['headline'][:50]}…"
+                for s in news_signals
+            ]
+            sel_label=st.selectbox(
+                "News rate signal overlay",signal_opts,
+                key="rh_news_signal",
+                help=(
+                    "Overlay a rate signal extracted from the curated news "
+                    "on the baseline forecast. The amber line shows how the "
+                    "model projection shifts under that ECB rate assumption."
+                ),
+            )
+            sel_idx=signal_opts.index(sel_label)-1
+            active_signal=news_signals[sel_idx] if sel_idx>=0 else None
+        signal_trajectory=None
+        if active_signal:
+            try:
+                signal_trajectory,_=build_public_horizon(
+                    public,model_preference="auto",
+                    rate_shock_bps=float(active_signal["value_bps"]),
+                )
+            except (ValueError,OverflowError,ArithmeticError):
+                signal_trajectory=None
+        legend_html=(
             '<div class="rh-legend">'
             '<span><i class="rh-key"></i>Published actuals</span>'
             '<span><i class="rh-key is-projected"></i>Baseline estimate</span>'
             '<span style="color:#BFA6F0">Shaded = model-based prediction ranges</span>'
-            '</div>'
         )
+        if active_signal:
+            sign=lambda v: f"+{v}" if v>0 else str(v)
+            legend_html+=(
+                '<span><i style="display:inline-block;width:21px;height:3px;'
+                'background:#F5A623;vertical-align:middle;"></i>'
+                f'News signal ({sign(active_signal["value_bps"])} bps)</span>'
+            )
+        legend_html+='</div>'
+        render_html(legend_html)
         st.altair_chart(
             _forecast_chart(trajectory,metric=metric,
                             history_points=12 if scope=="Latest 12 quarters" else 22,
-                            bands=view),
+                            bands=view,signal_trajectory=signal_trajectory),
             use_container_width=True,
         )
+        if active_signal:
+            st.caption(
+                f"News signal: {active_signal['headline']} "
+                f"({active_signal['source']}, {active_signal['published']})."
+                + (f" Quote: \"{active_signal['quote']}\"" if active_signal["quote"] else "")
+                +" This is an indicative overlay on the public-data model, not an "
+                "approved rate forecast or ABN guidance."
+            )
         st.caption(
             "Green = audited public Group NII/NIM actuals. Dashed purple = "
             "forecast. 90% / 95% bands reflect assumed Gaussian errors scaled "
             "from limited rolling tests, not bank-approved statistical confidence. "
-            "Horizon holds the ECB policy rate flat; rate scenarios belong in What-If."
+            "Horizon holds the ECB policy rate flat by default; "
+            "select a news signal above or use What-If for full rate scenarios."
         )
     with lens_col:
         render_html(_lens(trajectory,model))

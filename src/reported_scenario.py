@@ -15,6 +15,7 @@ from src.public_scenario_engine import (
     SCENARIO_METHODS,NEUTRAL_INPUTS,build_public_scenario_comparison
 )
 from src.reported_horizon import HORIZON_CSS
+from src.reported_news import load_real_data_rate_signals
 
 
 SCENARIO_CSS = """
@@ -58,6 +59,54 @@ def _impact_card(title,value,detail):
         '<div class="rs-impact-status">Scenario − matched model baseline</div>'
         '</div>'
     )
+
+
+def _news_signal_panel():
+    """Show AI-extracted rate signals from curated news with one-click Apply."""
+    signals=load_real_data_rate_signals()
+    if not signals:
+        return
+    sign=lambda v: f"+{v}" if v>0 else str(v)
+    with st.expander(
+        f"Apply news rate signal · {len(signals)} found",expanded=False
+    ):
+        st.caption(
+            "OpenAI extracted these concrete rate-change figures directly from "
+            "the curated news headlines. Each applies a hypothetical ECB shock "
+            "to the scenario below. Always review the source quote before use."
+        )
+        for i,sig in enumerate(signals):
+            info_col,btn_col=st.columns([3,1],gap="small")
+            with info_col:
+                st.markdown(
+                    f"**{sign(sig['value_bps'])} bps** · "
+                    f"{sig['source']} · {sig['published']}"
+                )
+                st.caption(sig["headline"][:90])
+                if sig["quote"]:
+                    st.caption(f"_\"{sig['quote']}\"_")
+            with btn_col:
+                if st.button(
+                    "Apply",
+                    key=f"rs_apply_sig_{i}_{sig['article_id']}",
+                    use_container_width=True,
+                ):
+                    st.session_state["rs_public_options"]={
+                        **st.session_state.get("rs_public_options",dict(NEUTRAL_INPUTS)),
+                        "rate_shock_bps":float(sig["value_bps"]),
+                    }
+                    st.session_state["rs_news_source"]={
+                        "rate_shock_bps":sig["value_bps"],
+                        "rate_effective_date":sig["published"],
+                        "official_data_url":sig["article_url"],
+                        "article_url":sig["article_url"],
+                        "article_title":sig["headline"],
+                        "status":(
+                            f"News signal: \"{sig['quote'][:80]}\""
+                            if sig["quote"] else "From news article"
+                        ),
+                    }
+                    st.rerun()
 
 
 def _scenario_controls():
@@ -253,6 +302,7 @@ def render_reported_scenario(s):
         return
     control,result=st.columns([.88,1.56],gap="large")
     with control:
+        _news_signal_panel()
         inputs=_scenario_controls()
     try:
         baseline,scenario,quarters,impacts=build_public_scenario_comparison(

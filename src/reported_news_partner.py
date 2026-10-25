@@ -467,3 +467,47 @@ def verified_rate_scenario(article, events, *, reported_dfr=2.25, today=None):
         "rate_shock_bps": int(change),
         "status":"Verified ECB rate data; requires human approval in What-If",
     }
+
+
+_REAL_DATA_RATE_BOUNDS = (-100, 100)
+
+
+def extract_rate_signals_from_articles(articles):
+    """Extract concrete rate_shock_bps signals from curated articles via OpenAI.
+
+    Uses each article's summary as the body text since full articles are not
+    stored. Only signals with an explicitly stated numeric rate change within
+    the Real Data engine bounds [-100, 100] bps are returned. Zero-value and
+    out-of-bounds signals are excluded. Results are sorted by confidence desc.
+    """
+    from src.news_partner import extract_signals
+    results = []
+    for article in articles:
+        adapted = {**article, "body": article.get("summary", "")}
+        try:
+            signals = extract_signals(adapted)
+        except Exception:
+            continue
+        for sig in signals:
+            if sig.get("engine_param") != "rate_shock_bps":
+                continue
+            try:
+                value = int(sig["value"])
+            except (KeyError, TypeError, ValueError):
+                continue
+            lo, hi = _REAL_DATA_RATE_BOUNDS
+            if not (lo <= value <= hi) or value == 0:
+                continue
+            results.append({
+                "value_bps": value,
+                "confidence": float(sig.get("confidence", 0)),
+                "quote": str(sig.get("quote", ""))[:120],
+                "signal_type": sig.get("signal_type", "rate_change"),
+                "headline": article.get("headline", ""),
+                "source": article.get("source", ""),
+                "published": str(article.get("published", ""))[:10],
+                "article_id": article.get("id", ""),
+                "article_url": article.get("url", ""),
+            })
+    results.sort(key=lambda x: x["confidence"], reverse=True)
+    return results
