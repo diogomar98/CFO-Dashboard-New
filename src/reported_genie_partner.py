@@ -348,6 +348,43 @@ def ask_real_genie(question, *, conversation_id=None, scope=None,
         ) from None
 
 
+def _answer_from_news(question, news_articles, responder, *, genie_context=""):
+    """Build an LLM answer from news context when Genie returned no data rows."""
+    import json
+    news_items=[
+        {
+            "headline":a.get("headline",""),
+            "source":a.get("source",""),
+            "published":a.get("published",""),
+            "summary":a.get("summary",""),
+        }
+        for a in news_articles[:8]
+    ]
+    instructions=(
+        "You assist an ABN AMRO CFO. The financial data warehouse returned no query "
+        "rows for this question. Answer using ONLY the recent news articles below. "
+        "Do not invent figures, regulatory outcomes, or ABN positions not stated in "
+        "the news. Clearly note when your answer is based on news context rather than "
+        "verified reported financial data. Be concise.\n\n"
+        "USER QUESTION: "+question+"\n\n"
+        "RECENT NEWS ARTICLES:\n"
+        +json.dumps(news_items,default=str,allow_nan=False)[:4000]
+    )
+    if genie_context:
+        instructions+=(
+            "\n\nGENIE NARRATIVE (unverified — no SQL rows returned):\n"
+            +genie_context[:1500]
+        )
+    try:
+        answer=str(responder(instructions)).strip()
+    except Exception:
+        answer=""
+    return answer if answer else (
+        "News context is available in the News module but AI commentary is "
+        "currently unavailable."
+    )
+
+
 def answer_real_genie_question(question, *, scope=None, conversation_id=None,
                                ask=None, generate=None, news_articles=None):
     """OpenAI reformulates the question for Genie, Genie queries Unity Catalog,
@@ -416,31 +453,37 @@ def answer_real_genie_question(question, *, scope=None, conversation_id=None,
             # Safest fallback is *raw* generated data, not invented analysis.
             answer="Genie returned a data table. Review the rows and SQL below; AI commentary is unavailable."
     elif narrative:
-        rows_status=str(result.get("query_rows_status") or "unavailable")
-        reason=(
-            "Genie returned a text-only answer without a SQL query."
-            if rows_status=="no_sql_attachment" else
-            "The SQL query returned no rows."
-            if rows_status=="zero_query_rows" else
-            "The Genie API returned no statement-response data."
-            if rows_status=="missing_statement_response" else
-            "The app could not retrieve the result (missing query identifiers)."
-            if rows_status=="missing_attachment_identifiers" else
-            "The app couldn't download the Genie external data chunk ("+rows_status+")."
-            if rows_status.startswith("external_result_failed_") else
-            "The app could not retrieve the SQL result ("+rows_status+")."
-        )
-        answer=(
-            "**Genie response (no query rows available for verification):** "
-            +narrative[:2500]
-            +"\n\n"+reason+" Do not rely on numerical conclusions "
-            "until the query rows have been verified."
-        )
+        if news_articles:
+            answer=_answer_from_news(prompt,news_articles,responder,genie_context=narrative)
+        else:
+            rows_status=str(result.get("query_rows_status") or "unavailable")
+            reason=(
+                "Genie returned a text-only answer without a SQL query."
+                if rows_status=="no_sql_attachment" else
+                "The SQL query returned no rows."
+                if rows_status=="zero_query_rows" else
+                "The Genie API returned no statement-response data."
+                if rows_status=="missing_statement_response" else
+                "The app could not retrieve the result (missing query identifiers)."
+                if rows_status=="missing_attachment_identifiers" else
+                "The app couldn't download the Genie external data chunk ("+rows_status+")."
+                if rows_status.startswith("external_result_failed_") else
+                "The app could not retrieve the SQL result ("+rows_status+")."
+            )
+            answer=(
+                "**Genie response (no query rows available for verification):** "
+                +narrative[:2500]
+                +"\n\n"+reason+" Do not rely on numerical conclusions "
+                "until the query rows have been verified."
+            )
     else:
-        answer=(
-            "Real Genie did not return verifiable data for this question. "
-            "Check the approved views, business-line scope and reporting period."
-        )
+        if news_articles:
+            answer=_answer_from_news(prompt,news_articles,responder)
+        else:
+            answer=(
+                "Real Genie did not return verifiable data for this question. "
+                "Check the approved views, business-line scope and reporting period."
+            )
     return {
         "answer":answer,
         "source":result.get("source","Real Data Genie Agent"),
