@@ -56,6 +56,43 @@ for stylesheet in (BASE_CSS, EXTENSIONS_CSS, PANELS_CSS, LOCAL_CSS):
     render_html(stylesheet)
 if get_data_mode() == "real":
     render_html(SPARKLINE_CSS)
+    # Scoped: Synthetic header and its original styling are unchanged.
+    render_html("""
+    <style>
+      .hud-hero.real-command-bar {
+        display:grid;grid-template-columns:minmax(0,1fr) auto;
+        grid-template-areas:"brand basis" "view source";
+        align-items:center;gap:.48rem 1.1rem;
+        padding:.82rem 1.12rem;
+      }
+      .real-command-bar > .hero-home-link {grid-area:brand;min-width:0;}
+      .real-command-bar > .hero-status-row {
+        grid-area:basis;justify-content:flex-end;
+        margin:0;flex-wrap:nowrap;
+      }
+      .real-command-bar > .view-selector {
+        grid-area:view;justify-content:flex-start;margin:0;
+        min-width:0;flex-wrap:wrap;
+      }
+      .real-command-bar > .source-selector {
+        grid-area:source;justify-content:flex-end;margin:0;
+        white-space:nowrap;
+      }
+      .real-command-bar .bl-selector-row {margin-top:0;}
+      .real-command-bar .data-pill {padding:.27rem .54rem;font-size:.60rem;}
+      .real-command-bar a.bl-pill {font-size:.60rem;padding:.24rem .52rem;}
+      @media(max-width:1050px){
+        .hud-hero.real-command-bar {
+          grid-template-columns:minmax(0,1fr);
+          grid-template-areas:"brand" "basis" "view" "source";
+          gap:.48rem;
+        }
+        .real-command-bar > .hero-status-row,
+        .real-command-bar > .source-selector {justify-content:flex-start;}
+        .real-command-bar > .hero-status-row {flex-wrap:wrap;}
+      }
+    </style>
+    """)
 
 # The greeting stands alone: no state, no data load, one way forward.
 if not has_entered():
@@ -153,7 +190,7 @@ switch_css = lambda candidate: "is-active" if data_mode == candidate else ""
 # local conditions.
 render_html(
     f"""
-    <div class="hud-hero" id="command-bar">
+    <div class="hud-hero{' real-command-bar' if is_real else ''}" id="command-bar">
         <a class="system-kicker hero-home-link" href="{module_url('home')}" target="_self"
            aria-label="Back to the CFO overview">
             <span class="hero-home-glyph" aria-hidden="true">&#8962;</span>
@@ -165,11 +202,11 @@ render_html(
             <span class="data-pill">{summary_pill}</span>
             {weather_pill}
         </div>
-        <div class="bl-selector-row">
+        <div class="bl-selector-row view-selector">
             <span class="bl-selector-label">View</span>
             {bl_pills}
         </div>
-        <div class="bl-selector-row">
+        <div class="bl-selector-row source-selector">
             <span class="bl-selector-label">Data source</span>
             <a class="bl-pill {switch_css('synthetic')}" href="{mode_url('synthetic')}" target="_self" aria-label="Use synthetic prototype data">Synthetic</a>
             <a class="bl-pill {switch_css('real')}" href="{mode_url('real')}" target="_self" aria-label="Use ABN AMRO reported quarterly data">Real Data · ABN AMRO</a>
@@ -367,8 +404,17 @@ def open_window(module):
     if is_real:
         description = ""
 
-    @st.dialog(title)
+    import inspect
+    # Newer Streamlit supports a true dismissal callback (X / ESC / outside).
+    # Older versions retain the explicit Home action inside the dialog.
+    on_dismiss_supported="on_dismiss" in inspect.signature(st.dialog).parameters
+    options={"on_dismiss":close_module} if on_dismiss_supported else {}
+
+    @st.dialog(title, **options)
     def window():
+        if st.button("← Back to Home",key="real_window_close_"+module) if is_real else False:
+            close_module()
+            st.rerun()
         if description:
             render_html(f'<div class="window-subtitle">{description}</div>')
 
