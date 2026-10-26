@@ -578,6 +578,14 @@ def answer_real_genie_question(question, *, scope=None, conversation_id=None,
             if rows_status=="missing_attachment_identifiers" else
             "The app couldn't download the Genie external data chunk ("+rows_status+")."
             if rows_status.startswith("external_result_failed_") else
+            "The app's SQL read-back was blocked ("+rows_status+
+            "). Verify User authorization: genie plus sql (or permitted "
+            "sql:restricted-query), SQL warehouse access, and Unity Catalog "
+            "SELECT grants. Do not grant additional access without approval."
+            if rows_status.startswith(("sql_requery_failed_","sql_statement_fetch_failed_")) else
+            "The SQL warehouse read-back was unavailable ("+rows_status+
+            "). Check the App's User authorization and approved warehouse."
+            if rows_status.startswith("sql_requery_") else
             "The app could not retrieve the SQL result ("+rows_status+")."
         )
         answer=(
