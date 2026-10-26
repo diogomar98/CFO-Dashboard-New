@@ -51,11 +51,7 @@ def _render_capital_arithmetic(evidence):
         st.metric("Capital numerator contribution", f"{bridge['capital_component_pp']:+.3f} pp")
     with col3:
         st.metric("RWA denominator contribution", f"{bridge['rwa_component_pp']:+.3f} pp")
-    st.caption(
-        "Numerator-first arithmetic bridge: CET1 capital / RWA × 100. "
-        "The two contributions sum to the reported ratio change. "
-        "They do NOT establish why capital or RWA moved."
-    )
+
     with st.expander("Review exact bridge and source values"):
         st.json(bridge)
     return bridge
@@ -68,14 +64,7 @@ def _live_cet1_thread(evidence):
 
 
 def render_reported_copilot(s):
-    render_html(
-        '<div class="section-title">CFO Copilot · reported financial investigations</div>'
-        '<div class="section-subtitle">'
-        'Ask the reported factsheet AI or explicitly select the new Real Genie '
-        'SQL Agent for governed quarterly data questions. Each answer reveals '
-        'its evidence; no Synthetic figures or agent are used in Real mode.'
-        '</div>'
-    )
+    render_html('<div class="section-title">Ask CFO Copilot</div>')
     options=SEGMENT_TOPICS if s.business_line else GROUP_TOPICS
     topic_names=["All reported metrics"]+[x for x in options if x!="All reported metrics"]
     topic=st.selectbox(
@@ -86,10 +75,7 @@ def render_reported_copilot(s):
     except ValueError as exc:
         st.error(f"Reported source check failed: {exc}")
         return
-    st.caption(
-        f"{evidence['scope']} · {evidence['as_of']} · "
-        "published quarterly financial figures"
-    )
+
     for col,metric in zip(st.columns(3),evidence["metrics"][:3]):
         with col:
             st.metric(metric["label"],_print_value(metric),_print_change(metric))
@@ -118,15 +104,7 @@ def render_reported_copilot(s):
             }
             for m in evidence["metrics"]
         ],use_container_width=True,hide_index=True)
-        st.caption(
-            "These figures are from the official reporting extract. "
-            "These displayed numbers are factsheet values, not Genie-generated "
-            "queries. Real Genie is a separate opt-in source with inspectable SQL."
-        )
+
     with st.expander("Inspect exact Real Data AI evidence payload"):
         st.code(json.dumps(evidence,ensure_ascii=False,indent=2),language="json")
-    st.caption(
-        "Factsheet AI uses the configured ABN Gateway; Real Genie uses a "
-        "separate REAL_GENIE_SPACE_ID and the existing Databricks SDK auth. "
-        "Synthetic mode and its original GENIE_SPACE_ID remain unchanged."
-    )
+
