@@ -55,20 +55,53 @@ def recent_official_articles(*, include_status=False):
 
 @st.cache_data(ttl=3600,show_spinner=False)
 def load_real_data_rate_signals():
-    """OpenAI-extracted concrete rate signals from the curated news selection.
+    """Concrete rate signals for the Horizon and What-If overlays.
+
+    Primary: OpenAI-extracted rate_shock_bps from the curated news selection.
+    Fallback: prototype news signals whose linked_scenario encodes a rate value
+    (e.g. "Rate +25bps") when the curated articles yield no rate signals.
 
     Returned dicts contain: value_bps, confidence, quote, headline, source,
-    published, article_id, article_url. Returns an empty list when no articles
-    are available or when no quantitative rate signals are found.
+    published, article_id, article_url.
     """
+    import re
     from src.reported_news_partner import extract_rate_signals_from_articles
     articles,_=recent_official_articles()
-    if not articles:
-        return []
-    try:
-        return extract_rate_signals_from_articles(articles)
-    except Exception:
-        return []
+    if articles:
+        try:
+            signals=extract_rate_signals_from_articles(articles)
+            if signals:
+                return signals
+        except Exception:
+            pass
+    # Fall back to prototype signals that carry an explicit rate value.
+    from src.reported_news_signals import load_prototype_news_signals
+    proto,_=load_prototype_news_signals()
+    results=[]
+    for item in proto:
+        scenario=str(item.get("linked_scenario") or "").strip()
+        m=re.match(r"Rate\s*([+-]?\d+)\s*bps",scenario,re.IGNORECASE)
+        if not m:
+            continue
+        try:
+            value_bps=int(m.group(1))
+        except ValueError:
+            continue
+        if value_bps==0 or not (-100<=value_bps<=100):
+            continue
+        results.append({
+            "value_bps":value_bps,
+            "confidence":float(item.get("confidence_score",0)),
+            "quote":str(item.get("bank_impact_summary") or "")[:120],
+            "signal_type":"rate_change",
+            "headline":item.get("headline",""),
+            "source":item.get("source",""),
+            "published":str(item.get("published",""))[:10],
+            "article_id":item.get("id",""),
+            "article_url":item.get("url",""),
+        })
+    results.sort(key=lambda x:x["confidence"],reverse=True)
+    return results
 
 
 def _effective_news_assessment(article, model_result=None):
