@@ -162,10 +162,13 @@ class ReportedDataTests(unittest.TestCase):
             self.assertEqual(hud.get_data_mode(), "real")
             self.assertEqual(hud.module_url("brief"), "?module=brief&bl=pbb&mode=real")
             self.assertEqual(hud.bl_url("Wealth Management"), "?enter=1&bl=wm&mode=real")
-            self.assertEqual(hud.mode_url("synthetic"), "?enter=1&bl=pbb")
+            self.assertEqual(hud.mode_url("synthetic"), "?enter=1&bl=pbb&mode=synthetic")
             self.assertEqual(hud.mode_url("real"), "?enter=1&bl=pbb&mode=real")
         with patch("src.hud.get_query_value", return_value=""):
-            self.assertEqual(hud.get_data_mode(), "synthetic")
+            self.assertEqual(hud.get_data_mode(), "real")
+        with patch("src.hud.get_query_value", side_effect=lambda key, default="": {"mode":"synthetic"}.get(key,default)):
+            self.assertEqual(hud.get_data_mode(),"synthetic")
+            self.assertIn("mode=synthetic",hud.module_url("news"))
 
     def test_original_entry_point_keeps_synthetic_path(self):
         main = Path(__file__).resolve().parents[1].joinpath("main.py").read_text()
