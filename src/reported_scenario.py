@@ -81,13 +81,7 @@ def _scenario_controls():
                  "Rate-sensitive forecasts incorporate it after a reporting-quarter lag.",
         )
         with st.expander("Advanced overrides · impose financial outcomes",expanded=False):
-            st.caption(
-                "Not inferred from an underlying banking driver. Use only when "
-                "management has a documented off-model assumption. Adjustments "
-                "compound each forecast quarter. NIM/NII effects are independent "
-                "because the available public information does not reconcile "
-                "average interest-earning assets or funding repricing."
-            )
+            st.caption("Manual, cumulative assumptions · not inferred from published banking drivers.")
             nim=st.number_input(
                 "Additional NIM adjustment per quarter (bps)",
                 min_value=-15.0,max_value=15.0,
@@ -110,10 +104,7 @@ def _scenario_controls():
     if st.button("Reset to neutral scenario",key="rs_reset_scenario",use_container_width=True):
         st.session_state["rs_public_options"]=dict(NEUTRAL_INPUTS)
         st.rerun()
-    st.caption(
-        "Baseline is recalculated using the same selected forecasting method "
-        "with all scenario shocks and overrides set to zero."
-    )
+
     if state["method"]=="no_change":
         st.warning(
             "**Flat financial baseline (ECB-insensitive):** rate changes do not "
@@ -217,13 +208,7 @@ def render_reported_scenario(s):
     render_html(HORIZON_CSS+SCENARIO_CSS)
     st.markdown('<div class="section-title">What-If Engine</div>',
                 unsafe_allow_html=True)
-    render_html(
-        '<div class="rs-intro">'
-        'Stress published ABN AMRO Group NII/NIM projections against a '
-        '<strong>matched neutral baseline</strong>. Start with a hypothetical ECB '
-        'deposit-rate shock; direct financial adjustments live under Advanced overrides. '
-        'Model outputs are indicative, not approved risk sensitivities.</div>'
-    )
+    st.caption("Group NII / NIM · compare an ECB rate scenario with the neutral baseline")
     if s.business_line:
         st.info(
             f"Scope selected: {s.business_line}. This sensitivity analysis is "
@@ -299,12 +284,7 @@ def render_reported_scenario(s):
         )
         st.altair_chart(_scenario_chart(baseline,scenario,metric=target),
                         use_container_width=True)
-        st.caption(
-            "Both forward series share the same historical factsheet observations "
-            "and the same forecasting method. Only entered scenarios differ. "
-            "The first Q3 effect of a rate shock is zero because the ARX uses "
-            "lagged ECB changes."
-        )
+
     st.markdown("#### Financial impact · period by period")
     pretty=quarters.copy()
     pretty["NIM baseline (bps)"]=pretty["base_nim_bps"].round(2)
@@ -322,16 +302,16 @@ def render_reported_scenario(s):
     st.markdown("#### How to interpret this test")
     for message in _impact_narrative(inputs,impacts,quarters):
         st.write("• "+message)
-    st.caption(
-        "FY2026 figures combine reported Q1/Q2 statutory Group NII with "
-        "modelled Q3/Q4 NII. ECB shock changes a hypothetical flat future "
-        "policy rate, not a calibrated bank-specific deposit or loan beta. "
-        "The model does not generate CET1, credit-loss or liquidity sensitivities."
-    )
+    with st.expander("Scenario methodology & limitations",expanded=False):
+        st.caption(
+            "FY2026 combines reported Q1/Q2 NII with modelled Q3/Q4. "
+            "Rate shocks are hypothetical and do not estimate bank-specific "
+            "deposit betas. CET1, credit losses and liquidity are not modelled."
+        )
     render_html(
         '<div class="module-action-row">'
         f'<a class="module-action-link" href="{module_url("horizon")}" target="_self">'
         'Return to Horizon baseline →</a>'
-        '<span class="rh-model-label">Source-backed model · Real Data only</span>'
+
         '</div>'
     )
