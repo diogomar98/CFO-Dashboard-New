@@ -11,6 +11,25 @@ from src.reported_genie_partner import _verified_query_rows
 
 
 class GenieRowsTests(unittest.TestCase):
+    def test_runtime_info_exposes_no_credentials(self):
+        from src.reported_genie_partner import _sdk_runtime_diagnostic
+        db=SimpleNamespace(
+            genie=SimpleNamespace(
+                get_message_attachment_query_result=lambda **kw:None
+            ),
+            statement_execution=SimpleNamespace(
+                execute_statement=lambda **kw:None
+            ),
+        )
+        runtime=_sdk_runtime_diagnostic(db)
+        self.assertTrue(runtime["has_current_genie_result_method"])
+        self.assertTrue(runtime["has_sql_execute_method"])
+        self.assertTrue(runtime["sdk_version"])
+        self.assertIn(runtime["user_auth_context"],{
+            "forwarded_user","no_forwarded_user_token","unavailable"
+        })
+        self.assertNotIn("token",str(runtime).lower().replace("no_forwarded_user_token",""))
+
     def test_inline_array_sdk_objects(self):
         response=SimpleNamespace(statement_response=SimpleNamespace(
             manifest=SimpleNamespace(schema=SimpleNamespace(columns=[
