@@ -159,9 +159,12 @@ def close_module():
     viewer past the greeting screen.
     """
     mode = get_data_mode()
+    current_bl = get_business_line()
     st.query_params.clear()
     st.query_params["enter"] = "1"
     st.query_params["mode"] = mode
+    if current_bl:
+        st.query_params["bl"] = _BL_URL_REV.get(current_bl,current_bl)
 
 
 def module_url(module):
