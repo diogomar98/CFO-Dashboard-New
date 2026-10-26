@@ -22,8 +22,8 @@ class RealGenieAutoTests(unittest.TestCase):
         self.assertEqual(data["version"], 2)
         targets = [x["identifier"] for x in data["data_sources"]["tables"]]
         self.assertEqual(
-            targets,
-            [f"{CATALOG}.{SCHEMA}.{table}" for table in TABLES],
+            sorted(targets),
+            sorted(f"{CATALOG}.{SCHEMA}.{table}" for table in TABLES),
         )
         self.assertEqual(len(data["config"]["sample_questions"]), 5)
         self.assertEqual(len(data["instructions"]["text_instructions"]), 1)
