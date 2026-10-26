@@ -166,6 +166,90 @@ class GenieRowsTests(unittest.TestCase):
         self.assertEqual(status,"sql_statement_fetch_failed_PermissionError")
         self.assertNotIn("Sensitive",status)
 
+    def test_genie_message_hydration_unlocks_statement_id_and_rows(self):
+        """Wait response has SQL text; fetched message supplies statement_id."""
+        from src.reported_genie_partner import ask_real_genie
+        query_before=SimpleNamespace(
+            query="SELECT date, net_profit_m FROM cfo_group_quarterly",
+            statement_id=None,
+        )
+        query_after=SimpleNamespace(
+            query=query_before.query, statement_id="statement-from-fresh-message",
+        )
+        initial=SimpleNamespace(
+            status="COMPLETED",content="One financial row",
+            attachments=[SimpleNamespace(attachment_id="att-1",query=query_before)],
+            message_id="msg-1",conversation_id="conv-1",
+        )
+        fresh=SimpleNamespace(
+            status="COMPLETED",content="One financial row",
+            attachments=[SimpleNamespace(attachment_id="att-1",query=query_after)],
+            message_id="msg-1",conversation_id="conv-1",
+        )
+        original=SimpleNamespace(
+            status=SimpleNamespace(state="SUCCEEDED"),
+            manifest=SimpleNamespace(
+                schema=SimpleNamespace(columns=[
+                    SimpleNamespace(name="date",type_name="DATE"),
+                    SimpleNamespace(name="net_profit_m",type_name="DOUBLE"),
+                ]),
+                total_row_count=1,
+            ),
+            result=SimpleNamespace(data_array=[["2026-06-30","780.531615084"]]),
+        )
+        calls=[]
+        class Genie:
+            def start_conversation_and_wait(self,**kwargs):
+                return initial
+            def get_message(self,**kwargs):
+                calls.append("refresh")
+                return fresh
+        class Statements:
+            def get_statement(self,*,statement_id):
+                calls.append(statement_id)
+                return original
+        db=SimpleNamespace(genie=Genie(),statement_execution=Statements())
+        fake=SimpleNamespace(
+            _extract_query_attachment=lambda msg: next(
+                a for a in msg.attachments if getattr(a,"query",None)
+            ),
+            _extract_answer_text=lambda msg: msg.content,
+            _fetch_query_result=lambda *args: SimpleNamespace(statement_response=None),
+            _msg_attr=lambda obj,*names:next(
+                (getattr(obj,n) for n in names if getattr(obj,n,None)),None
+            ),
+        )
+        with patch.dict(sys.modules,{"src.genie_partner":fake}):
+            result=ask_real_genie("Group net profit?",space_id="real-space",client=db)
+        self.assertEqual(result["query_rows_status"],"sql_statement_rows_retrieved")
+        self.assertEqual(len(result["data"]),1)
+        self.assertEqual(calls,["refresh","statement-from-fresh-message"])
+
+    def test_missing_statement_id_now_has_actionable_diagnostic(self):
+        from src.reported_genie_partner import ask_real_genie
+        query=SimpleNamespace(query="SELECT date FROM cfo_group_quarterly")
+        msg=SimpleNamespace(
+            status="COMPLETED",content="One row",
+            attachments=[SimpleNamespace(attachment_id="att-1",query=query)],
+            message_id="msg-1",conversation_id="conv-1",
+        )
+        class Genie:
+            def start_conversation_and_wait(self,**kwargs):
+                return msg
+        db=SimpleNamespace(genie=Genie())
+        fake=SimpleNamespace(
+            _extract_query_attachment=lambda message: message.attachments[0],
+            _extract_answer_text=lambda message:message.content,
+            _fetch_query_result=lambda *args:SimpleNamespace(statement_response=None),
+            _msg_attr=lambda obj,*names:next(
+                (getattr(obj,n) for n in names if getattr(obj,n,None)),None
+            ),
+        )
+        with patch.dict(sys.modules,{"src.genie_partner":fake}):
+            result=ask_real_genie("Group metric?",space_id="real-space",client=db)
+        self.assertEqual(result["query_rows_status"],"genie_result_missing_statement_id")
+        self.assertFalse(result["has_rows"])
+
     def test_limited_to_fifty_rows(self):
         response={"statement_response":{
             "manifest":{"schema":{"columns":[{"name":"amount"}]},
