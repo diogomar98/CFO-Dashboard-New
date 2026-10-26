@@ -221,6 +221,56 @@ def _verified_query_rows(db, space_id, conversation_id, message_id,
         return frame, "sql_statement_fetch_failed_" + type(exc).__name__
 
 
+def _refresh_completed_message(db, space_id, msg):
+    """Hydrate attachment and statement identifiers after wait completes.
+
+    Genie start_conversation_and_wait can return a completed summary whose
+    SQL attachment is not yet fully hydrated. Read the same message again
+    using the Genie GET API, not a new SQL execution.
+    """
+    from src.reported_genie_rows import _field
+    from src.genie_partner import _msg_attr, _parse_rest_query_result
+    cid=_msg_attr(msg,"conversation_id")
+    mid=_msg_attr(msg,"message_id","id")
+    if not cid or not mid:
+        return msg
+    fresh=None
+    getter=getattr(getattr(db,"genie",None),"get_message",None)
+    if callable(getter):
+        try:
+            fresh=getter(space_id=space_id,conversation_id=cid,message_id=mid)
+        except Exception:
+            fresh=None
+    if fresh is None:
+        api=getattr(db,"api_client",None)
+        if callable(getattr(api,"do",None)):
+            try:
+                raw=api.do("GET",(
+                    f"/api/2.0/genie/spaces/{space_id}/conversations/{cid}"
+                    f"/messages/{mid}"
+                ))
+                fresh=_parse_rest_query_result(raw) if isinstance(raw,dict) else raw
+            except Exception:
+                fresh=None
+    if not fresh:
+        return msg
+    attachments=_field(fresh,"attachments") or []
+    return fresh if any(_field(a,"query") is not None for a in attachments) else msg
+
+
+def _genie_statement_id(message, attachment):
+    """The SQL statement ID belongs to query, not attachment.id."""
+    from src.reported_genie_rows import _field
+    query=_field(attachment,"query")
+    metadata=_field(query,"query_result_metadata","queryResultMetadata")
+    return (
+        _field(query,"statement_id","statementId")
+        or _field(metadata,"statement_id","statementId")
+        or _field(_field(message,"query_result","queryResult"),
+                  "statement_id","statementId")
+    )
+
+
 def ask_real_genie(question, *, conversation_id=None, scope=None,
                    space_id=None, client=None):
     """Query ONLY a configured Real Genie Space using existing ABN SDK auth.
@@ -265,6 +315,9 @@ def ask_real_genie(question, *, conversation_id=None, scope=None,
         status=str(getattr(status,"value",status) or "").upper()
         if status in ("FAILED","CANCELLED","CANCELED","EXPIRED"):
             raise RuntimeError("Real Genie could not complete the source query.")
+        # Read the completed message before trying to retrieve SQL results.
+        # A wait result can expose text and SQL but omit statement_id.
+        msg=_refresh_completed_message(db,configured_space,msg)
         answer=_extract_answer_text(msg).strip()
         sql,attachment=_extract_verified_sql(msg)
         frame=pd.DataFrame()
@@ -282,14 +335,30 @@ def ask_real_genie(question, *, conversation_id=None, scope=None,
                 # The SQL statement ID is NOT the Genie attachment ID.
                 # Never mix them when calling the two distinct APIs.
                 from src.reported_genie_rows import _field
-                statement_id=(
-                    _field(query,"statement_id","statementId")
-                    or _field(_field(msg,"query_result"),"statement_id")
-                )
+                statement_id=_genie_statement_id(msg,attachment)
                 frame,rows_status=_verified_query_rows(
                     db,configured_space,cid,mid,aid,
                     statement_id=statement_id,
                 )
+                if frame.empty and rows_status not in {"zero_query_rows"}:
+                    # A fresh GET sometimes provides the statement ID only
+                    # after Genie has materialised its SQL result.
+                    refreshed=_refresh_completed_message(db,configured_space,msg)
+                    _,updated_attachment=_extract_verified_sql(refreshed)
+                    updated_id=(
+                        _genie_statement_id(refreshed,updated_attachment)
+                        if updated_attachment is not None else None
+                    )
+                    if updated_id and updated_id!=statement_id:
+                        frame,rows_status=_verified_query_rows(
+                            db,configured_space,cid,mid,aid,
+                            statement_id=updated_id,
+                        )
+                    elif not statement_id and rows_status in {
+                        "missing_statement_response","missing_result_payload",
+                        "unknown_result_format"
+                    }:
+                        rows_status="genie_result_missing_statement_id"
             else:
                 # Only an actual SQL statement response counts as evidence.
                 inline=getattr(msg,"query_result",None)
