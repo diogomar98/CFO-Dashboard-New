@@ -183,6 +183,44 @@ BRIEF_CSS = """
     .rb-primary-value {font-size:clamp(1.15rem,2.5vw,1.75rem);}
 
 }
+/* CFO headline cards: colour-coded by topic, not regulatory RAG status. */
+.rb-primary {
+    border-radius:10px;
+    border:1px solid rgba(92,162,119,.36);
+    box-shadow:inset 0 1px 0 rgba(180,236,198,.07),0 7px 19px rgba(0,0,0,.18);
+    min-height:164px;
+}
+.rb-primary:before {
+    content:"";position:absolute;left:0;top:0;right:0;height:3px;
+    background:linear-gradient(90deg,#4cc885,transparent 75%);
+}
+.rb-primary.kpi-profit {border-color:rgba(77,195,125,.44);}
+.rb-primary.kpi-capital {border-color:rgba(115,166,232,.42);background:linear-gradient(145deg,rgba(18,27,39,.96),rgba(8,14,18,.96));}
+.rb-primary.kpi-capital:before {background:linear-gradient(90deg,#7fb9e9,transparent 75%);}
+.rb-primary.kpi-liquidity {border-color:rgba(216,179,100,.43);background:linear-gradient(145deg,rgba(34,29,19,.96),rgba(16,16,10,.96));}
+.rb-primary.kpi-liquidity:before {background:linear-gradient(90deg,#dfbc81,transparent 75%);}
+.rb-primary.kpi-capital .rb-primary-label {color:#b1d4f1;}
+.rb-primary.kpi-liquidity .rb-primary-label {color:#e3cf9e;}
+.rb-primary .rb-primary-label {font-size:.7rem;padding-bottom:9px;border-bottom:1px solid rgba(160,199,173,.15);}
+.rb-primary .rb-primary-value {font-size:clamp(1.58rem,2.3vw,2.15rem);font-weight:800;}
+.rb-primary .rb-primary-delta {font-size:.73rem;color:#a7e5b7;font-weight:700;}
+.rb-primary .rb-primary-delta.is-down {color:#e3b4a4;}
+.rb-executive-panel {
+    margin:.55rem 0 1rem;border:1px solid rgba(92,161,116,.35);
+    border-left:3px solid #47c277;border-radius:9px;
+    background:linear-gradient(135deg,rgba(27,53,34,.65),rgba(11,22,18,.90));
+    padding:1rem 1.1rem;box-shadow:0 8px 22px rgba(0,0,0,.12);
+}
+.rb-executive-heading {font-size:.74rem;letter-spacing:.085em;text-transform:uppercase;
+    font-weight:800;color:#a5e6bb;padding-bottom:.7rem;
+    border-bottom:1px solid rgba(161,209,176,.22);}
+.rb-executive-point {display:grid;grid-template-columns:105px 1fr;gap:.6rem;
+    padding:.7rem 0;border-bottom:1px solid rgba(161,209,176,.10);
+    line-height:1.48;}
+.rb-executive-point:last-child {border:0;padding-bottom:0;}
+.rb-executive-topic {font-size:.68rem;letter-spacing:.04em;color:#95c7a8;font-weight:800;}
+.rb-executive-copy {font-size:.82rem;color:#e0eee3;}
+@media(max-width:700px){.rb-executive-point {grid-template-columns:1fr;gap:.23rem;}}
 </style>
 """
 
@@ -287,15 +325,19 @@ def _metric_bar_chart(rows, name, unit):
 
 def _primary_card(title, value, comparison, dates, values, detail):
     chart = sparkline_html(values, label=title, dates=dates)
+    title_low=title.lower()
+    kind=("kpi-profit" if "profit" in title_low else
+          "kpi-capital" if "cet1" in title_low or "capital" in title_low else
+          "kpi-liquidity" if "liquidity" in title_low else "kpi-profit")
+    down=" is-down" if comparison.strip().startswith(("-", "−")) else ""
     return (
-        '<div class="rb-primary" tabindex="0">'
+        f'<div class="rb-primary {kind}" tabindex="0">'
         f'<span class="rb-primary-label">{html.escape(title)}</span>'
         '<div class="rb-primary-reading">'
         f'<span class="rb-primary-value">{html.escape(value)}</span>'
         f'<span class="rb-hover-trend">{chart}</span>'
         '</div>'
-        f'<span class="rb-primary-delta">{html.escape(comparison)} QoQ</span>'
-        f'<div class="rb-primary-help">{html.escape(detail)} · reported quarterly trend</div>'
+        f'<span class="rb-primary-delta{down}">{html.escape(comparison)} QoQ</span>'
         '</div>'
     )
 
@@ -713,9 +755,20 @@ def render_reported_brief(s):
         + html.escape(scope) + " / " + _quarter(latest["date"]) + '</div>'
     )
     _primary_cards(s, frame)
-    st.markdown("#### Executive commentary")
-    for sentence in _key_insights(s):
-        st.write("• " + sentence)
+    insights=[]
+    for line in _key_insights(s):
+        topic,_,detail=line.partition(": ")
+        insights.append(
+            '<div class="rb-executive-point">'
+            f'<span class="rb-executive-topic">{html.escape(topic)}</span>'
+            f'<span class="rb-executive-copy">{html.escape(detail)}</span>'
+            '</div>'
+        )
+    render_html(
+        '<section class="rb-executive-panel">'
+        '<div class="rb-executive-heading">Executive commentary</div>'
+        +''.join(insights)+'</section>'
+    )
 
 
     open_now = st.session_state.get("rb_expanded", False)
