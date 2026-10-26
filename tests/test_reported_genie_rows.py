@@ -25,6 +25,16 @@ class GenieRowsTests(unittest.TestCase):
             "date":"2026-06-30","net_profit_m":781.25
         })
 
+    def test_direct_statement_response_shape_recovers_rows(self):
+        direct={
+            "manifest":{"schema":{"columns":[{"name":"date","type_name":"DATE"},{"name":"rwa_m","type_name":"DOUBLE"}]},"total_row_count":1},
+            "result":{"data_array":[["2026-06-30","12.5"]]},
+        }
+        rows,status=decode_genie_rows(direct)
+        self.assertEqual(status,"rows_retrieved")
+        self.assertEqual(rows.iloc[0]["date"],"2026-06-30")
+        self.assertEqual(rows.iloc[0]["rwa_m"],12.5)
+
     def test_typed_rows_raw_api(self):
         response={
             "statement_response":{
