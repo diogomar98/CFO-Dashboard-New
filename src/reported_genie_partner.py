@@ -453,29 +453,58 @@ def answer_real_genie_question(question, *, scope=None, conversation_id=None,
             # Safest fallback is *raw* generated data, not invented analysis.
             answer="Genie returned a data table. Review the rows and SQL below; AI commentary is unavailable."
     elif narrative:
+        rows_status=str(result.get("query_rows_status") or "unavailable")
+        reason=(
+            "Genie returned a text-only answer without a SQL query."
+            if rows_status=="no_sql_attachment" else
+            "The SQL query returned no rows."
+            if rows_status=="zero_query_rows" else
+            "The Genie API returned no statement-response data."
+            if rows_status=="missing_statement_response" else
+            "The app could not retrieve the result (missing query identifiers)."
+            if rows_status=="missing_attachment_identifiers" else
+            "The app couldn't download the Genie external data chunk ("+rows_status+")."
+            if rows_status.startswith("external_result_failed_") else
+            "The app could not retrieve the SQL result ("+rows_status+")."
+        )
+        base_answer=(
+            "**Genie response (no query rows available for verification):** "
+            +narrative[:2500]
+            +"\n\n"+reason+" Do not rely on numerical conclusions "
+            "until the query rows have been verified."
+        )
         if news_articles:
-            answer=_answer_from_news(prompt,news_articles,responder,genie_context=narrative)
+            import json
+            news_items=[
+                {
+                    "headline":a.get("headline",""),
+                    "source":a.get("source",""),
+                    "published":a.get("published",""),
+                    "summary":a.get("summary",""),
+                }
+                for a in news_articles[:8]
+            ]
+            instructions=(
+                "You assist an ABN AMRO CFO. The Real Data Genie agent returned "
+                "a narrative response to the question below. SQL query rows could "
+                "not be retrieved for independent row-level verification. Present "
+                "Genie's narrative as the primary answer, noting the absence of "
+                "row-level verification. Do not invent figures not stated in the "
+                "narrative. Recent news is provided as supplementary context only "
+                "— never substitute it for Genie's financial data.\n\n"
+                "USER QUESTION: "+prompt+"\n\n"
+                "GENIE NARRATIVE (primary source):\n"+narrative[:2500]
+                +"\n\nRECENT NEWS CONTEXT (supplementary background only):\n"
+                +json.dumps(news_items,default=str,allow_nan=False)[:2000]
+            )
+            try:
+                answer=str(responder(instructions)).strip()
+                if not answer:
+                    answer=base_answer
+            except Exception:
+                answer=base_answer
         else:
-            rows_status=str(result.get("query_rows_status") or "unavailable")
-            reason=(
-                "Genie returned a text-only answer without a SQL query."
-                if rows_status=="no_sql_attachment" else
-                "The SQL query returned no rows."
-                if rows_status=="zero_query_rows" else
-                "The Genie API returned no statement-response data."
-                if rows_status=="missing_statement_response" else
-                "The app could not retrieve the result (missing query identifiers)."
-                if rows_status=="missing_attachment_identifiers" else
-                "The app couldn't download the Genie external data chunk ("+rows_status+")."
-                if rows_status.startswith("external_result_failed_") else
-                "The app could not retrieve the SQL result ("+rows_status+")."
-            )
-            answer=(
-                "**Genie response (no query rows available for verification):** "
-                +narrative[:2500]
-                +"\n\n"+reason+" Do not rely on numerical conclusions "
-                "until the query rows have been verified."
-            )
+            answer=base_answer
     else:
         if news_articles:
             answer=_answer_from_news(prompt,news_articles,responder)
