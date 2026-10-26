@@ -57,6 +57,22 @@ HORIZON_CSS = """
   .rh-metric {min-height:140px;}
   .rh-metric-value {font-size:clamp(1.42rem,4vw,1.85rem);}
 }
+.rh-insight-stack {display:grid;grid-template-columns:1fr;gap:10px;margin:.75rem 0;}
+.rh-insight-block {position:relative;padding:13px 14px;border:1px solid rgba(87,165,112,.31);
+ border-top:2px solid rgba(106,203,133,.68);border-radius:8px;
+ background:linear-gradient(135deg,rgba(25,45,30,.88),rgba(10,22,17,.93));}
+.rh-insight-block.is-blue {border-color:rgba(121,164,210,.35);border-top-color:#87b7e0;
+ background:linear-gradient(135deg,rgba(22,38,52,.86),rgba(11,22,27,.93));}
+.rh-insight-block.is-gold {border-color:rgba(205,174,116,.36);border-top-color:#d8b576;
+ background:linear-gradient(135deg,rgba(44,37,23,.84),rgba(25,24,17,.93));}
+.rh-insight-eyebrow {font-size:.62rem;letter-spacing:.10em;font-weight:850;text-transform:uppercase;color:#a5ceb2;margin-bottom:6px;}
+.rh-insight-block.is-blue .rh-insight-eyebrow {color:#a9d0f1;}
+.rh-insight-block.is-gold .rh-insight-eyebrow {color:#dcc696;}
+.rh-insight-number {font-size:1.32rem;font-weight:800;line-height:1.25;color:#f2faf2;
+ font-family:"Cascadia Mono",Consolas,monospace;letter-spacing:-.04em;}
+.rh-insight-sub {font-size:.75rem;line-height:1.5;color:#c7d8ca;margin-top:5px;}
+.rh-insight-next {font-size:.73rem;color:#b3d7c1;line-height:1.5;
+ margin-top:11px;padding:10px 11px;border-left:2px solid #6bb68a;background:rgba(34,68,42,.22);}
 </style>
 """
 
@@ -154,49 +170,76 @@ def _forecast_chart(history, metric="nim_pct", history_points=12, bands="Both"):
 
 
 def _lens(path,summary):
-    """Concise Synthetic-style forward lens; diagnostics remain in Details."""
-    diag=summary["diagnostics"]
-    nim=diag["nim_bps"]
-    nii=diag["nii_m"]
-    methods={
-        "no_change":"Flat baseline",
-        "rate_arx":"Rate-sensitive model",
-    }
+    """CFO interpretation of source-backed baseline; no causal inventions."""
+    diagnostics=summary["diagnostics"]
+    nim_model=diagnostics["nim_bps"]["model"]
+    nii_model=diagnostics["nii_m"]["model"]
+    nim_change=float(summary["year_end_nim_change_bps"])
+    nim_direction=("increase" if nim_change>0 else
+                   "decrease" if nim_change<0 else "no change")
+    rate_method=(
+        "The NIM model includes a lagged ECB rate movement."
+        if nim_model=="rate_arx" else
+        "The selected NIM model holds the latest margin level flat."
+    )
+    income_method=(
+        "NII uses an empirically selected rate-sensitive model."
+        if nii_model=="rate_arx" else
+        "NII uses a flat financial benchmark."
+    )
+    reported=float(summary["fy_nii_actual_m"])
+    estimated=float(summary["fy_nii_projected_m"])
+    year_baseline=float(summary["fy_nii_m"])
     start=path[path["series"]=="Baseline"].iloc[0]["quarter"]
     final=path[path["series"]=="Baseline"].iloc[-1]["quarter"]
     return f"""
     <div class="forward-lens-panel">
-      <div class="forward-lens-kicker">Forward lens</div>
-      <div class="forward-lens-title">What does the outlook show?</div>
+      <div class="forward-lens-kicker">FORWARD LENS / CFO VIEW</div>
+      <div class="forward-lens-title">What is the outlook telling us?</div>
+      <div class="rh-insight-stack">
+        <div class="rh-insight-block">
+          <div class="rh-insight-eyebrow">Year-end margin outlook</div>
+          <div class="rh-insight-number">{summary['year_end_nim_pct']:.2f}%
+          <span style="font-size:.80rem;color:#a9d9bc;">{nim_change:+.1f} bps</span></div>
+          <div class="rh-insight-sub">Modelled NIM at {html.escape(final)} vs
+          Q2 2026 · {nim_direction} of {abs(nim_change):.1f} bps.
+          This is a projection, not management guidance.</div>
+        </div>
+        <div class="rh-insight-block is-blue">
+          <div class="rh-insight-eyebrow">Full-year interest income</div>
+          <div class="rh-insight-number">€{year_baseline/1000:.2f}bn</div>
+          <div class="rh-insight-sub">€{reported/1000:.2f}bn reported H1 +
+          €{estimated/1000:.2f}bn estimated H2.
+          The split separates published results from forecast amounts.</div>
+        </div>
+        <div class="rh-insight-block is-gold">
+          <div class="rh-insight-eyebrow">Rate assumptions · model choice</div>
+          <div class="rh-insight-number">ECB {summary['last_ecb_qend_pct']:.2f}%</div>
+          <div class="rh-insight-sub">Held constant in the neutral baseline.
+          {rate_method} {income_method}
+          These are empirical relationships, not proven business causes.</div>
+        </div>
+      </div>
       <div class="forward-lens-row">
         <span class="forward-lens-label">Historical data</span>
-        <span class="forward-lens-value"><strong>22 quarters</strong> · Group NIM / NII</span>
+        <span class="forward-lens-value">22 Group quarters · 2021–2026</span>
       </div>
       <div class="forward-lens-row">
-        <span class="forward-lens-label">NIM forecast</span>
-        <span class="forward-lens-value"><strong>{methods[nim['model']]}</strong> ·
-        1Q MAE {nim['selected_1q_mae']:.1f} bps</span>
+        <span class="forward-lens-label">Prediction ranges</span>
+        <span class="forward-lens-value">90% / 95% model-based bands ·
+        not calibrated coverage guarantees</span>
       </div>
-      <div class="forward-lens-row">
-        <span class="forward-lens-label">NII forecast</span>
-        <span class="forward-lens-value"><strong>{methods[nii['model']]}</strong> ·
-        1Q log MAE {nii['selected_1q_mae']:.3f}</span>
-      </div>
-      <div class="forward-lens-row">
-        <span class="forward-lens-label">Policy rate</span>
-        <span class="forward-lens-value"><strong>{summary['last_ecb_qend_pct']:.2f}%</strong>
-        · held flat in baseline</span>
-      </div>
-      <div class="forward-lens-row">
-        <span class="forward-lens-label">Forecast period</span>
-        <span class="forward-lens-value">{html.escape(start)} – {html.escape(final)}
-        · 90% / 95% model-based ranges</span>
+      <div class="rh-insight-next">
+        <strong>CFO follow-up</strong> — Test higher or lower ECB rates in
+        What-If, and review NII sensitivity separately from any claim about
+        actual repricing or customer behaviour.
       </div>
       <div class="forward-lens-meaning">
-        Indicative public-data projection, not official ABN AMRO guidance.
-        <strong>Sources & forecast limitations</strong> below has details.
+        Indicative public-data projection. See
+        <strong>Sources &amp; forecast limitations</strong> below.
       </div>
     </div>"""
+
 
 
 def _validation_details(history,summary,frame):
