@@ -195,6 +195,24 @@ def _verified_query_rows(db, space_id, conversation_id, message_id,
         except Exception as exc:
             status = "raw_result_failed_" + type(exc).__name__
 
+    # Some Databricks SDK versions still expose a separate legacy
+    # message-level query-result endpoint. It reads existing SQL output.
+    legacy=getattr(getattr(db,"genie",None),"get_message_query_result",None)
+    if callable(legacy):
+        try:
+            legacy_response=legacy(
+                space_id=space_id,conversation_id=conversation_id,
+                message_id=message_id,
+            )
+            legacy_frame,legacy_status=read_response(legacy_response)
+            if not legacy_frame.empty or legacy_status=="zero_query_rows":
+                return legacy_frame,"legacy_"+legacy_status
+            if status in {"missing_statement_response","unknown_result_format"}:
+                status="legacy_"+legacy_status
+        except Exception as exc:
+            if status in {"missing_statement_response","unknown_result_format"}:
+                status="legacy_result_failed_"+type(exc).__name__
+
     # Databricks Genie exposes the executed statement_id on its SQL
     # attachment. Get its existing result using the SQL Statement Execution
     # API without running any new SQL. This requires the 'sql' OAuth scope.
