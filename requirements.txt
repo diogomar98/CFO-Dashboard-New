@@ -1,2 +1,2 @@
 streamlit
-databricks-sdk
+databricks-sdk==0.156.0
