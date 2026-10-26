@@ -154,77 +154,47 @@ def _forecast_chart(history, metric="nim_pct", history_points=12, bands="Both"):
 
 
 def _lens(path,summary):
-    """Preserve the Synthetic forward-lens layout with accountable methodology."""
+    """Concise Synthetic-style forward lens; diagnostics remain in Details."""
     diag=summary["diagnostics"]
-    nim=diag["nim_bps"];nii=diag["nii_m"]
-    method_labels={"no_change":"Flat financial baseline (ECB-insensitive)",
-                   "rate_arx":"Rate-sensitive ARX (ridge regularised)"}
+    nim=diag["nim_bps"]
+    nii=diag["nii_m"]
+    methods={
+        "no_change":"Flat baseline",
+        "rate_arx":"Rate-sensitive model",
+    }
     start=path[path["series"]=="Baseline"].iloc[0]["quarter"]
     final=path[path["series"]=="Baseline"].iloc[-1]["quarter"]
-    full_year=summary["fy_nii_m"]
-    fy_text=(
-        f"FY{path.iloc[-1]['date'].year-1} NII baseline "
-        f"<strong>€{full_year/1000:,.2f}bn</strong> "
-        f"(€{summary['fy_nii_actual_m']/1000:,.2f}bn reported "
-        f"+ €{summary['fy_nii_projected_m']/1000:,.2f}bn estimated)."
-        if pd.notna(full_year) else
-        "Full-year NII cannot be calculated from the available reported periods."
-    )
     return f"""
     <div class="forward-lens-panel">
-      <div class="forward-lens-kicker">Forward lens · public-data model</div>
-      <div class="forward-lens-title">What is the baseline telling us?</div>
+      <div class="forward-lens-kicker">Forward lens</div>
+      <div class="forward-lens-title">What does the outlook show?</div>
       <div class="forward-lens-row">
-        <span class="forward-lens-label">Historical evidence</span>
-        <span class="forward-lens-value"><strong>22 quarters</strong> of independently
-        reconciled Group NII and NIM from public ABN AMRO factsheets (2021 Q1 to 2026 Q2),
-        plus ECB deposit-rate history.</span>
+        <span class="forward-lens-label">Historical data</span>
+        <span class="forward-lens-value"><strong>22 quarters</strong> · Group NIM / NII</span>
       </div>
       <div class="forward-lens-row">
-        <span class="forward-lens-label">NIM model</span>
-        <span class="forward-lens-value"><strong>{method_labels[nim['model']]}</strong>.
-        The lagged previous-quarter NIM and prior ECB DFR movement are candidate drivers.
-        One-quarter historical mean absolute error:
-        <strong>{nim['selected_1q_mae']:.1f} bps</strong>
-        ({nim['backtest_1q_count']} historical origins).</span>
+        <span class="forward-lens-label">NIM forecast</span>
+        <span class="forward-lens-value"><strong>{methods[nim['model']]}</strong> ·
+        1Q MAE {nim['selected_1q_mae']:.1f} bps</span>
       </div>
       <div class="forward-lens-row">
-        <span class="forward-lens-label">Income model</span>
-        <span class="forward-lens-value"><strong>{method_labels[nii['model']]}</strong>.
-        Fitted on log of published quarterly statutory NII;
-        selected one-quarter log error <strong>{nii['selected_1q_mae']:.3f}</strong>.
-        NII and NIM are not mechanically tied without matching average
-        interest-earning assets.</span>
+        <span class="forward-lens-label">NII forecast</span>
+        <span class="forward-lens-value"><strong>{methods[nii['model']]}</strong> ·
+        1Q log MAE {nii['selected_1q_mae']:.3f}</span>
       </div>
       <div class="forward-lens-row">
-        <span class="forward-lens-label">Rates context</span>
-        <span class="forward-lens-value">Last published ECB DFR:
-        <strong>{summary['last_ecb_qend_pct']:.2f}%</strong>.
-        The neutral forecast holds it flat from the Q2 2026 close.
-        This is a modelling convention, <strong>not</strong> an ECB forecast
-        or market-implied forward path.</span>
+        <span class="forward-lens-label">Policy rate</span>
+        <span class="forward-lens-value"><strong>{summary['last_ecb_qend_pct']:.2f}%</strong>
+        · held flat in baseline</span>
       </div>
       <div class="forward-lens-row">
-        <span class="forward-lens-label">Year-end lens</span>
-        <span class="forward-lens-value">{fy_text}
-        Projections cover <strong>{html.escape(start)}</strong> to
-        <strong>{html.escape(final)}</strong>.</span>
-      </div>
-      <div class="forward-lens-row">
-        <span class="forward-lens-label">Prediction bands</span>
-        <span class="forward-lens-value"><strong>90% and 95%</strong> model-based
-        Gaussian ranges derived from out-of-sample rolling forecast RMSE, separately
-        at horizons 1–4 quarters. With only 22 quarters, these are
-        <strong>not independently calibrated coverage guarantees</strong>.
-        Macroeconomic regime changes and acquisition effects are not fully captured.</span>
+        <span class="forward-lens-label">Forecast period</span>
+        <span class="forward-lens-value">{html.escape(start)} – {html.escape(final)}
+        · 90% / 95% model-based ranges</span>
       </div>
       <div class="forward-lens-meaning">
-        <strong>Interpretation</strong>
-        A transparent, public-data reference case, not ABN's official earnings guidance.
-        Full-year commercial NII guidance, acquisition adjustments and internal
-        repricing parameters cannot be reconciled to this statutory NII model.
-        No calibrated statistical confidence guarantee is available from
-        the limited source package; official plan details are not contained in the source package.
+        Indicative public-data projection, not official ABN AMRO guidance.
+        <strong>Sources & forecast limitations</strong> below has details.
       </div>
     </div>"""
 
