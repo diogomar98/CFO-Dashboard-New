@@ -132,9 +132,9 @@ class ReportedHorizonTests(unittest.TestCase):
         spec = chart.to_dict()
         self.assertEqual(len(spec["layer"]),6)
         text = _lens(public_path, public_model)
-        self.assertIn("No calibrated statistical confidence",text)
-        self.assertIn("not contained in the source package",text)
-        self.assertIn("Historical evidence", text)
+        self.assertIn("Indicative public-data projection",text)
+        self.assertIn("Sources & forecast limitations",text)
+        self.assertIn("Historical data", text)
         source = Path("src/reported_horizon.py").read_text(encoding="utf-8")
         self.assertIn("Where are we heading?",source)
         # Real Data KPI numbers should retain the strong Synthetic hierarchy.
