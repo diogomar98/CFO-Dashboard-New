@@ -188,6 +188,11 @@ class ReportedDataTests(unittest.TestCase):
             self.assertIn("mode=synthetic",hud.module_url("brief"))
             self.assertIn("mode=real",hud.mode_url("real"))
 
+    def test_greeting_is_consistently_good_morning(self):
+        main=Path(__file__).resolve().parents[1].joinpath("main.py").read_text()
+        self.assertIn('Good morning <strong>Ferdi</strong>',main)
+        self.assertNotIn('Good afternoon <strong>Ferdi</strong>',main)
+
     def test_original_entry_point_keeps_synthetic_path(self):
         main = Path(__file__).resolve().parents[1].joinpath("main.py").read_text()
         self.assertIn("s = build_state(business_line=selected_bl)", main)
