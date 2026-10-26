@@ -247,7 +247,7 @@ def _refresh_completed_message(db, space_id, msg):
     using the Genie GET API, not a new SQL execution.
     """
     from src.reported_genie_rows import _field
-    from src.genie_partner import _msg_attr, _parse_rest_query_result
+    from src.genie_partner import _msg_attr
     cid=_msg_attr(msg,"conversation_id")
     mid=_msg_attr(msg,"message_id","id")
     if not cid or not mid:
@@ -267,7 +267,11 @@ def _refresh_completed_message(db, space_id, msg):
                     f"/api/2.0/genie/spaces/{space_id}/conversations/{cid}"
                     f"/messages/{mid}"
                 ))
-                fresh=_parse_rest_query_result(raw) if isinstance(raw,dict) else raw
+                if isinstance(raw,dict):
+                    from src.genie_partner import _parse_rest_query_result
+                    fresh=_parse_rest_query_result(raw)
+                else:
+                    fresh=raw
             except Exception:
                 fresh=None
     if not fresh:
