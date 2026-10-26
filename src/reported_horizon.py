@@ -11,6 +11,7 @@ import pandas as pd
 import streamlit as st
 
 from src.hud import module_url, render_html
+from src.reported_horizon_drivers import segment_driver_watchpoints
 from src.public_horizon_engine import (
     load_public_horizon_inputs, build_public_horizon, CRITICAL_VALUES,
 )
@@ -169,74 +170,75 @@ def _forecast_chart(history, metric="nim_pct", history_points=12, bands="Both"):
     ).configure(background="#08100C")
 
 
-def _lens(path,summary):
-    """CFO interpretation of source-backed baseline; no causal inventions."""
+def _lens(path,summary,*,segments=None,group=None):
+    """Executive interpretation, not a duplicate of the three forecast KPIs."""
     diagnostics=summary["diagnostics"]
     nim_model=diagnostics["nim_bps"]["model"]
     nii_model=diagnostics["nii_m"]["model"]
-    nim_change=float(summary["year_end_nim_change_bps"])
-    nim_direction=("increase" if nim_change>0 else
-                   "decrease" if nim_change<0 else "no change")
-    rate_method=(
-        "The NIM model includes a lagged ECB rate movement."
+    segment_points=(
+        segment_driver_watchpoints(segments,group)
+        if segments is not None and group is not None else []
+    )
+    topics=[]
+    for item in segment_points:
+        colour=" is-blue" if item["colour"]=="blue" else (
+            " is-gold" if item["colour"]=="amber" else ""
+        )
+        topics.append(
+            f'<div class="rh-insight-block{colour}">'
+            f'<div class="rh-insight-eyebrow">{html.escape(item["topic"])}</div>'
+            f'<div class="rh-insight-number">{html.escape(item["title"])}'
+            f'</div><div class="rh-insight-sub"><strong>'
+            f'{html.escape(item["number"])} {html.escape(item["unit"])}'
+            '</strong></div>'
+            f'<div class="rh-insight-sub">{html.escape(item["body"])}</div>'
+            '</div>'
+        )
+
+    if not topics:
+        topics=[
+            '<div class="rh-insight-block is-blue">'
+            '<div class="rh-insight-eyebrow">Revenue model</div>'
+            '<div class="rh-insight-sub">The supplied data support a Group '
+            'NII/NIM projection, not a defensible allocation of forecast '
+            'income contributions across business lines.</div></div>'
+        ]
+    nim_text=(
+        "The selected Group NIM model uses lagged policy-rate changes."
         if nim_model=="rate_arx" else
-        "The selected NIM model holds the latest margin level flat."
+        "Group NIM is held flat by the selected benchmark model."
     )
-    income_method=(
-        "NII uses an empirically selected rate-sensitive model."
+    nii_text=(
+        "The Group NII model includes a lagged rate driver."
         if nii_model=="rate_arx" else
-        "NII uses a flat financial benchmark."
+        "The selected Group NII model is an empirical flat baseline."
     )
-    reported=float(summary["fy_nii_actual_m"])
-    estimated=float(summary["fy_nii_projected_m"])
-    year_baseline=float(summary["fy_nii_m"])
-    start=path[path["series"]=="Baseline"].iloc[0]["quarter"]
-    final=path[path["series"]=="Baseline"].iloc[-1]["quarter"]
     return f"""
     <div class="forward-lens-panel">
-      <div class="forward-lens-kicker">FORWARD LENS / CFO VIEW</div>
-      <div class="forward-lens-title">What is the outlook telling us?</div>
+      <div class="forward-lens-kicker">FORWARD LENS / FINANCIAL WATCHPOINTS</div>
+      <div class="forward-lens-title">Where should the CFO focus?</div>
       <div class="rh-insight-stack">
-        <div class="rh-insight-block">
-          <div class="rh-insight-eyebrow">Year-end margin outlook</div>
-          <div class="rh-insight-number">{summary['year_end_nim_pct']:.2f}%
-          <span style="font-size:.80rem;color:#a9d9bc;">{nim_change:+.1f} bps</span></div>
-          <div class="rh-insight-sub">Modelled NIM at {html.escape(final)} vs
-          Q2 2026 · {nim_direction} of {abs(nim_change):.1f} bps.
-          This is a projection, not management guidance.</div>
-        </div>
-        <div class="rh-insight-block is-blue">
-          <div class="rh-insight-eyebrow">Full-year interest income</div>
-          <div class="rh-insight-number">€{year_baseline/1000:.2f}bn</div>
-          <div class="rh-insight-sub">€{reported/1000:.2f}bn reported H1 +
-          €{estimated/1000:.2f}bn estimated H2.
-          The split separates published results from forecast amounts.</div>
-        </div>
-        <div class="rh-insight-block is-gold">
-          <div class="rh-insight-eyebrow">Rate assumptions · model choice</div>
-          <div class="rh-insight-number">ECB {summary['last_ecb_qend_pct']:.2f}%</div>
-          <div class="rh-insight-sub">Held constant in the neutral baseline.
-          {rate_method} {income_method}
-          These are empirical relationships, not proven business causes.</div>
-        </div>
+        {''.join(topics)}
       </div>
       <div class="forward-lens-row">
-        <span class="forward-lens-label">Historical data</span>
-        <span class="forward-lens-value">22 Group quarters · 2021–2026</span>
-      </div>
-      <div class="forward-lens-row">
-        <span class="forward-lens-label">Prediction ranges</span>
-        <span class="forward-lens-value">90% / 95% model-based bands ·
-        not calibrated coverage guarantees</span>
+        <span class="forward-lens-label">Income drivers</span>
+        <span class="forward-lens-value">{html.escape(nim_text)}
+        {html.escape(nii_text)}</span>
       </div>
       <div class="rh-insight-next">
-        <strong>CFO follow-up</strong> — Test higher or lower ECB rates in
-        What-If, and review NII sensitivity separately from any claim about
-        actual repricing or customer behaviour.
+        <strong>Management question</strong> — How do segment-specific loan
+        yields, deposit pricing, customer mix and rate sensitivities translate
+        into the Group NII forecast? These driver inputs are not in the
+        current source package.
       </div>
       <div class="forward-lens-meaning">
-        Indicative public-data projection. See
+        <strong>Observed segment movements are not forecast contributions.</strong>
+        No segment-level NII/NIM is available, so no segment can reliably be
+        assigned a portion of the Group NII/NIM projection.
+        <br/>Historical data: 22 Group quarters · modelled prediction ranges,
+        not calibrated confidence guarantees.
         <strong>Sources & forecast limitations</strong> below.
+        Indicative public-data projection.
       </div>
     </div>"""
 
@@ -360,7 +362,7 @@ def render_reported_horizon(s):
         )
 
     with lens_col:
-        render_html(_lens(trajectory,model))
+        render_html(_lens(trajectory,model,segments=s.reported_segments,group=s.reported_group))
     _validation_details(trajectory,model,public)
     render_html(
         '<div class="module-action-row">'
