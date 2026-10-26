@@ -531,16 +531,17 @@ def _genie_provenance(item):
             )
         runtime=item.get("sdk_runtime") or {}
         if runtime:
-            with st.expander("Connection diagnostics",expanded=False):
-                st.caption(
-                    "Databricks SDK: "
-                    +str(runtime.get("sdk_version","unknown"))+
-                    " · Genie attachment result API: "+
-                    ("available" if runtime.get("has_current_genie_result_method") else "missing")+
-                    " · SQL execution API: "+
-                    ("available" if runtime.get("has_sql_execute_method") else "missing")+
-                    " · Auth: "+str(runtime.get("user_auth_context","unknown"))
-                )
+            # Streamlit forbids expander inside expander. Keep diagnostics
+            # as one quiet line inside the existing SQL inspection panel.
+            st.caption(
+                "Connection diagnostics · Databricks SDK: "
+                +str(runtime.get("sdk_version","unknown"))+
+                " · Genie attachment result API: "+
+                ("available" if runtime.get("has_current_genie_result_method") else "missing")+
+                " · SQL execution API: "+
+                ("available" if runtime.get("has_sql_execute_method") else "missing")+
+                " · Auth: "+str(runtime.get("user_auth_context","unknown"))
+            )
 
 
 
