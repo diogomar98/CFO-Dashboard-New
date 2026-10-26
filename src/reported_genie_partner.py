@@ -143,8 +143,85 @@ def _genie_external_rows(response):
     return pd.concat(frames, ignore_index=True), "external_rows_retrieved"
 
 
+def _governed_sql_read_only(sql):
+    """Restrict Genie-derived SQL to read-only queries over three approved tables.
+
+    This is defense in depth, not a substitute for SQL and UC permissions.
+    """
+    if not isinstance(sql,str) or not 5<len(sql)<=12000:
+        return False
+    cleaned=re.sub(r"(?s)/\*.*?\*/|--[^\n]*"," ",sql).strip()
+    if not re.match(r"^(SELECT|WITH)\b",cleaned,re.I):
+        return False
+    if ";" in cleaned.rstrip(";"):
+        return False
+    forbidden=r"\b(INSERT|UPDATE|DELETE|MERGE|DROP|ALTER|CREATE|TRUNCATE|GRANT|REVOKE|COPY|CALL|SET|USE|OPTIMIZE|REFRESH|EXECUTE)\b"
+    if re.search(forbidden,cleaned,re.I):
+        return False
+    if re.search(r"(?i)\b(read_files|read_csv|read_json|parquet|delta\.|system\.|information_schema|http_|jdbc)\b",cleaned):
+        return False
+    ctes={x.lower() for x in re.findall(r"(?i)(?:\bWITH\b|,)\s*([a-z_]\w*)\s+AS\s*\(",cleaned)}
+    refs=re.findall(r"(?i)\b(?:FROM|JOIN)\s+([\x60\"\w.]+)",cleaned)
+    if not refs:
+        return False
+    approved={
+        "frbg3as_studio_a.cfo_cockpit.cfo_group_quarterly",
+        "frbg3as_studio_a.cfo_cockpit.cfo_segment_quarterly",
+        "frbg3as_studio_a.cfo_cockpit.cfo_group_nii_nim_2021",
+    }
+    found=False
+    for ref in refs:
+        name=ref.replace(chr(96),"").replace('"',"").lower()
+        if name in approved:
+            found=True
+        elif name not in ctes:
+            return False
+    return found
+
+
+def _requery_governed_genie_sql(db, sql):
+    """Final fallback: rerun the unchanged Genie SELECT as the app user.
+
+    This executes another read-only SQL statement; unlike the Genie attachment
+    response, these rows come directly from the approved SQL warehouse.
+    """
+    from src.reported_genie_rows import decode_genie_rows, _field
+    if not _governed_sql_read_only(sql):
+        return pd.DataFrame(),"sql_requery_not_allowlisted"
+    execution=getattr(db,"statement_execution",None)
+    method=getattr(execution,"execute_statement",None)
+    if not callable(method):
+        return pd.DataFrame(),"sql_requery_api_unavailable"
+    warehouse=os.getenv("REAL_GENIE_SQL_WAREHOUSE_ID","7405605052754358").strip()
+    if not re.fullmatch(r"[0-9a-f]{16}",warehouse,re.I):
+        return pd.DataFrame(),"sql_requery_warehouse_not_configured"
+    try:
+        response=method(
+            statement=sql.strip().rstrip(";"),
+            warehouse_id=warehouse,
+            catalog="frbg3as_studio_a",schema="cfo_cockpit",
+            row_limit=MAX_RETURNED_ROWS,wait_timeout="20s",
+        )
+        state=_field(_field(response,"status"),"state")
+        state=str(getattr(state,"value",state) or "").upper()
+        if state in {"FAILED","CANCELED","CLOSED"}:
+            return pd.DataFrame(),"sql_requery_statement_"+state.lower()
+        if state in {"PENDING","RUNNING"}:
+            sid=_field(response,"statement_id")
+            getter=getattr(execution,"get_statement",None)
+            if not sid or not callable(getter):
+                return pd.DataFrame(),"sql_requery_still_running"
+            response=getter(statement_id=sid)
+        frame,status=decode_genie_rows(response,max_rows=MAX_RETURNED_ROWS)
+        if not frame.empty:
+            return frame,"sql_requery_verified_rows"
+        return frame,"sql_requery_"+status
+    except Exception as exc:
+        return pd.DataFrame(),"sql_requery_failed_"+type(exc).__name__
+
+
 def _verified_query_rows(db, space_id, conversation_id, message_id,
-                         attachment_id, *, statement_id=None):
+                         attachment_id, *, statement_id=None, sql=None):
     """Read already executed Genie rows, with a governed statement-ID fallback.
 
     Retrieval order:
@@ -217,10 +294,17 @@ def _verified_query_rows(db, space_id, conversation_id, message_id,
     # attachment. Get its existing result using the SQL Statement Execution
     # API without running any new SQL. This requires the 'sql' OAuth scope.
     if not statement_id:
-        return frame, status
+        if sql is not None:
+            retried,code=_requery_governed_genie_sql(db,sql)
+            if not retried.empty or code=="sql_requery_zero_query_rows":
+                return retried,code
+            return frame,code
+        return frame,status
     execution = getattr(db, "statement_execution", None)
     if not callable(getattr(execution, "get_statement", None)):
-        return frame, "sql_statement_api_unavailable"
+        if sql is not None:
+            return _requery_governed_genie_sql(db,sql)
+        return frame,"sql_statement_api_unavailable"
     try:
         statement = execution.get_statement(statement_id=statement_id)
         state = _field(_field(statement, "status"), "state")
@@ -234,9 +318,20 @@ def _verified_query_rows(db, space_id, conversation_id, message_id,
         )
         if not statement_frame.empty:
             return statement_frame, "sql_statement_rows_retrieved"
-        return statement_frame, "sql_statement_" + statement_status
+        if sql is not None:
+            retried,code=_requery_governed_genie_sql(db,sql)
+            if not retried.empty or code=="sql_requery_zero_query_rows":
+                return retried,code
+            return frame,code
+        return statement_frame,"sql_statement_"+statement_status
     except Exception as exc:
-        return frame, "sql_statement_fetch_failed_" + type(exc).__name__
+        code="sql_statement_fetch_failed_"+type(exc).__name__
+        if sql is not None:
+            retried,rerun_status=_requery_governed_genie_sql(db,sql)
+            if not retried.empty or rerun_status=="sql_requery_zero_query_rows":
+                return retried,rerun_status
+            return frame,rerun_status+"__after_"+code
+        return frame,code
 
 
 def _refresh_completed_message(db, space_id, msg):
@@ -360,7 +455,7 @@ def ask_real_genie(question, *, conversation_id=None, scope=None,
                 statement_id=_genie_statement_id(msg,attachment)
                 frame,rows_status=_verified_query_rows(
                     db,configured_space,cid,mid,aid,
-                    statement_id=statement_id,
+                    statement_id=statement_id,sql=sql,
                 )
                 if frame.empty and rows_status not in {"zero_query_rows"}:
                     # A fresh GET sometimes provides the statement ID only
@@ -374,13 +469,10 @@ def ask_real_genie(question, *, conversation_id=None, scope=None,
                     if updated_id and updated_id!=statement_id:
                         frame,rows_status=_verified_query_rows(
                             db,configured_space,cid,mid,aid,
-                            statement_id=updated_id,
+                            statement_id=updated_id,sql=sql,
                         )
-                    elif not statement_id and rows_status in {
-                        "missing_statement_response","missing_result_payload",
-                        "unknown_result_format"
-                    }:
-                        rows_status="genie_result_missing_statement_id"
+                    # Keep the precise SQL result diagnostic instead of
+                    # replacing it with the old generic message.
             else:
                 # Only an actual SQL statement response counts as evidence.
                 inline=getattr(msg,"query_result",None)
