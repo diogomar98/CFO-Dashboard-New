@@ -259,7 +259,7 @@ class GenieRowsTests(unittest.TestCase):
         )
         with patch.dict(sys.modules,{"src.genie_partner":fake}):
             result=ask_real_genie("Group metric?",space_id="real-space",client=db)
-        self.assertEqual(result["query_rows_status"],"genie_result_missing_statement_id")
+        self.assertEqual(result["query_rows_status"],"sql_requery_not_allowlisted")
         self.assertFalse(result["has_rows"])
 
     def test_limited_to_fifty_rows(self):
