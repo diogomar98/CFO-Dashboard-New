@@ -464,6 +464,11 @@ def _genie_provenance(item):
         data=item.get("data")
         if isinstance(data,pd.DataFrame) and not data.empty:
             st.dataframe(data,use_container_width=True,hide_index=True)
+            if item.get("query_rows_status")=="sql_requery_verified_rows":
+                st.caption(
+                    "Verified against the approved reporting tables using "
+                    "Genie's original read-only SQL and the authorized warehouse."
+                )
         else:
             status=item.get("query_rows_status","unavailable")
             reasons={
@@ -488,6 +493,21 @@ def _genie_provenance(item):
                 "sql_statement_canceled":"The SQL statement was cancelled.",
             }
             explanation=reasons.get(status)
+            if status.startswith((
+                "sql_requery_failed_","sql_statement_fetch_failed_"
+            )):
+                explanation=(
+                    "The App could not read SQL results with its current "
+                    "authorization (diagnostic: "+status+"). Check App User "
+                    "authorization scopes genie + sql (or an approved "
+                    "read-only SQL scope), warehouse CAN USE, and governed "
+                    "table SELECT permissions. No access was granted automatically."
+                )
+            elif status=="sql_requery_not_allowlisted":
+                explanation=(
+                    "The generated SQL was outside the three approved CFO "
+                    "reporting tables; automatic SQL re-execution was blocked."
+                )
             if explanation is None and status.startswith((
                 "query_fetch_failed_", "sdk_result_failed_",
                 "raw_result_failed_", "external_result_failed_",
