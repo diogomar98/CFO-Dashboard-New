@@ -315,7 +315,7 @@ class RealGenieIsolationTests(unittest.TestCase):
             "cfo_segment_quarterly",root
         ).columns)
         src=Path("setup/real_genie_uc_setup.py").read_text("utf-8")
-        self.assertIn('source.write.saveAsTable(target)', src)
+        self.assertIn('source.write.mode("ignore").saveAsTable(target)', src)
         self.assertIn('spark.catalog.tableExists', src)
         self.assertNotIn('mode("errorifexists")', src)
         self.assertNotIn('mode("overwrite")',src)
