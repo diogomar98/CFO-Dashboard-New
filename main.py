@@ -141,10 +141,10 @@ else:
 # Preserve the main HUD while visibly differentiating published quarter-end
 # actuals from synthetic daily/mid-month readings.
 date_pill = (
-    f"Reported close / {s.close_date}" if is_real else f"Live data / {s.live_date}"
+    "" if is_real else f"Live data / {s.live_date}"
 )
 summary_pill = (
-    "Published quarterly actuals · QoQ" if is_real
+    "Q2 2026 financials · QoQ" if is_real
     else f"{s.executive_change_count} changes summarized"
 )
 switch_css = lambda candidate: "is-active" if data_mode == candidate else ""
@@ -161,7 +161,7 @@ render_html(
         </a>
         <div class="hero-status-row">
             <span class="data-pill">{date_pill}</span>
-            <span class="data-pill">Close / {s.close_date}</span>
+            {"" if is_real else f'<span class="data-pill">Close / {s.close_date}</span>'}
             <span class="data-pill">{summary_pill}</span>
             {weather_pill}
         </div>
@@ -232,18 +232,18 @@ def dial(module):
 selection_class = "has-selection" if selected_module != "home" else ""
 horizon_confidence = confidence_label(s.conf_horizon_ye_nim) if not is_real else "Not modelled"
 nim_headline = (
-    "Business-line NIM not disclosed · Group data only"
+    "Group-level NIM only"
     if is_real and selected_bl
     else (f"NIM {s.cert_current_nim:.2f}% · {s.nim_mom_bps:+.1f} bps QoQ"
           if is_real else
           f"NIM {s.cert_current_nim:.2f}% · {s.nim_mom_bps:+.1f} bps MoM")
 )
 horizon_headline = (
-    "Reported trends · forecast pending" if is_real
+    "Group NIM · NII outlook" if is_real
     else f"YE NIM {s.horizon_year_end_nim:.2f}% · conf {horizon_confidence}"
 )
 scenario_headline = (
-    "Actual opening balances · model pending" if is_real
+    "ECB rates · scenario analysis" if is_real
     else "ECB ±100 bps · 365D max"
 )
 
@@ -280,8 +280,8 @@ news_focus = html.escape(str(s.geo_focus["country"])) if s.geo_focus is not None
 
 lenses = [
     (
-        "news", "◇", "News", "Financial news · AI relevance",
-        "Bloomberg · FT · Yahoo · FD · banks", s.ratings["news_attention"], None,
+        "news", "◇", "News", "26 external news signals",
+        "NL · DE · FR · BE · Europe", s.ratings["news_attention"], None,
     ),
     (
         "treasury", "△", "Treasury", "Reported aggregate holdings",
@@ -321,6 +321,9 @@ lenses = [
 
 def lens_box(module, icon, title, metric, sub, reading, confidence):
     conf_html = "" if confidence is None else confidence_badge(confidence)
+    # Real News is a prototype editorial feed; there is no bank-approved
+    # RAG for news. Remove the distracting Awaiting Data badge entirely.
+    status_html = "" if (is_real and module in {"news","peers"}) else rag_badge(reading)
     return f"""
     <a class="dock-action lens-box {dial(module)}" href="{module_url(module)}" target="_self">
         <span class="dock-icon">{icon}</span>
@@ -328,7 +331,7 @@ def lens_box(module, icon, title, metric, sub, reading, confidence):
             <strong class="dock-title">{title}</strong>
             <span class="lens-metric">{metric}</span>
             <span class="dock-metric">{html.escape(sub)}</span>
-            <span class="kpi-badges">{rag_badge(reading)}{conf_html}</span>
+            <span class="kpi-badges">{status_html}{conf_html}</span>
         </span>
     </a>
     """
@@ -362,11 +365,12 @@ def open_window(module):
     """
     title, description = MODULE_METADATA[module]
     if is_real:
-        description = "ABN AMRO reported quarterly actuals · source-backed analytical view"
+        description = ""
 
     @st.dialog(title)
     def window():
-        render_html(f'<div class="window-subtitle">{description}</div>')
+        if description:
+            render_html(f'<div class="window-subtitle">{description}</div>')
 
         # A signal pushed here from the News window explains itself once.
         applied_signal = st.session_state.pop("scenario_from_signal", None)
@@ -398,7 +402,7 @@ elif is_real:
 # ============================================================
 
 if is_real:
-    dataset_note = "ABN AMRO factsheet · quarterly source-backed reporting"
+    dataset_note = ""
 else:
     dataset_status = datasets_available()
     missing_datasets = [name for name, ok in dataset_status.items() if not ok]
@@ -411,7 +415,7 @@ else:
         dataset_note = f"{len(dataset_status)} datasets loaded"
 
 footer_provenance = (
-    "Reported quarterly actuals · unavailable calculations suppressed"
+    "ABN AMRO · Q2 2026"
     if is_real else "Synthetic data · illustrative only · not for financial decisions"
 )
 footer_date = (
@@ -423,8 +427,8 @@ render_html(
     f"""
     <div class="system-footer">
         <span>{footer_provenance}</span>
-        <span>{dataset_note}</span>
-        <span>{footer_date}</span>
+        {"" if is_real else f"<span>{dataset_note}</span>"}
+        {"" if is_real else f"<span>{footer_date}</span>"}
     </div>
     """
 )
