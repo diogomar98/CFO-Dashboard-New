@@ -236,7 +236,7 @@ def _lens(path,summary):
       </div>
       <div class="forward-lens-meaning">
         Indicative public-data projection. See
-        <strong>Sources &amp; forecast limitations</strong> below.
+        <strong>Sources & forecast limitations</strong> below.
       </div>
     </div>"""
 
