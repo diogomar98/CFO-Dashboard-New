@@ -394,6 +394,33 @@ def _genie_statement_id(message, attachment):
     )
 
 
+def _sdk_runtime_diagnostic(db):
+    """Non-sensitive runtime info useful when App Genie rows differ from UI."""
+    try:
+        from importlib.metadata import version
+        sdk_version=version("databricks-sdk")
+    except Exception:
+        sdk_version="unknown"
+    genie=getattr(db,"genie",None)
+    statement=getattr(db,"statement_execution",None)
+    try:
+        import streamlit as st
+        forwarded=bool(st.context.headers.get("x-forwarded-access-token"))
+        identity="forwarded_user" if forwarded else "no_forwarded_user_token"
+    except Exception:
+        identity="unavailable"
+    return {
+        "sdk_version":sdk_version,
+        "user_auth_context":identity,
+        "has_current_genie_result_method":callable(
+            getattr(genie,"get_message_attachment_query_result",None)
+        ),
+        "has_sql_execute_method":callable(
+            getattr(statement,"execute_statement",None)
+        ),
+    }
+
+
 def ask_real_genie(question, *, conversation_id=None, scope=None,
                    space_id=None, client=None):
     """Query ONLY a configured Real Genie Space using existing ABN SDK auth.
@@ -425,6 +452,7 @@ def ask_real_genie(question, *, conversation_id=None, scope=None,
     )
     try:
         db=client if client is not None else _get_client()
+        runtime_info=_sdk_runtime_diagnostic(db)
         if conversation_id:
             msg=db.genie.create_message_and_wait(
                 space_id=configured_space,conversation_id=conversation_id,
@@ -500,6 +528,7 @@ def ask_real_genie(question, *, conversation_id=None, scope=None,
             "has_rows":not frame.empty,
             "row_count":len(frame),
             "query_rows_status":rows_status,
+            "sdk_runtime":runtime_info,
             "used_genie":True,
         }
     except (RuntimeError,ValueError):
@@ -608,5 +637,6 @@ def answer_real_genie_question(question, *, scope=None, conversation_id=None,
         "used_genie":True,
         "has_rows":has_rows,
         "query_rows_status":result.get("query_rows_status","unavailable"),
+        "sdk_runtime":result.get("sdk_runtime",{}),
         "mode":"real",
     }
