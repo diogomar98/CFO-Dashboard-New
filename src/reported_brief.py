@@ -418,9 +418,6 @@ def _expanded_grid(s, frame):
     st.markdown("### Figures at a glance")
     if s.business_line:
         st.caption("Select a headline card above to explore reported segment trends.")
-    else:
-
-
     for start in range(0, len(metrics), 3):
         cols = st.columns(3, gap="medium")
         for col, (metric, name, unit) in zip(cols, metrics[start:start + 3]):
