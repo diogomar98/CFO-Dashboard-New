@@ -412,7 +412,7 @@ def open_window(module):
 
     @st.dialog(title, **options)
     def window():
-        if is_real and st.button("← Back to Home",key="real_window_close_"+module):
+        if is_real and not on_dismiss_supported and st.button("← Back to Home",key="real_window_close_"+module):
             close_module()
             st.rerun()
         if description:
