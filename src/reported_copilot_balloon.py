@@ -469,7 +469,11 @@ def _genie_provenance(item):
             reasons={
                 "no_sql_attachment":"Genie did not generate a SQL query for this answer.",
                 "zero_query_rows":"The generated SQL returned zero rows.",
-                "missing_statement_response":"Genie did not return a statement response with data rows.",
+                "missing_statement_response":"The Genie result endpoint omitted statement_response; inspect the original SQL attachment in Databricks.",
+                "genie_result_missing_statement_id":"Genie provided SQL text but no statement ID even after refreshing the completed message. The App cannot retrieve the verified result; check Genie API response fields and OAuth scope.",
+                "sql_statement_missing_statement_response":"The SQL Statement Execution endpoint returned no statement response data.",
+                "sql_statement_missing_result_payload":"The SQL statement endpoint has metadata but no result rows.",
+                "legacy_missing_statement_response":"Both Genie attachment and legacy message-result endpoints omitted statement_response.",
                 "missing_attachment_identifiers":"Genie did not provide the message/attachment IDs needed to fetch rows.",
                 "unknown_result_format":"Genie returned an SQL response without rows in a recognised field.",
                 "inline_rows_empty":"The API returned an empty inline data array; no rows could be confirmed.",
@@ -487,7 +491,7 @@ def _genie_provenance(item):
             if explanation is None and status.startswith((
                 "query_fetch_failed_", "sdk_result_failed_",
                 "raw_result_failed_", "external_result_failed_",
-                "sql_statement_fetch_failed_"
+                "sql_statement_fetch_failed_", "legacy_result_failed_",
             )):
                 explanation=(
                     "The Genie API SQL-result retrieval failed. "
