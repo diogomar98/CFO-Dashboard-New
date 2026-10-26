@@ -368,7 +368,6 @@ def render_reported_module(module, s):
     group = s.reported_group
     segments = s.reported_segments
     latest = group.iloc[-1]
-    st.caption(f"ABN AMRO reported actuals · {_quarter(latest['date'])} · Source: {_SOURCE}")
     if module == "brief":
         # Isolated factsheet-only presentation; the original Synthetic module
         # (src/modules/brief.py) remains untouched.
