@@ -318,7 +318,7 @@ class ReportedNewsTests(unittest.TestCase):
         self.assertIn("status-impact-",markup)
         view=Path("src/reported_news.py").read_text(encoding="utf-8")
         self.assertIn("rn_filter_relevance",view)
-        self.assertIn("rn_filter_segment",view)
+        self.assertIn("rn_filter_category",view)
         self.assertIn("How is relevance defined?",view)
         self.assertIn("filter_financial_news(",view)
         self.assertIn("rn-news-scroll",view)
