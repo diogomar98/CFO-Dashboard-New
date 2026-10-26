@@ -101,7 +101,13 @@ def load_real_data_rate_signals():
             "article_url":item.get("url",""),
         })
     results.sort(key=lambda x:x["confidence"],reverse=True)
-    return results
+    seen=set()
+    deduped=[]
+    for r in results:
+        if r["value_bps"] not in seen:
+            seen.add(r["value_bps"])
+            deduped.append(r)
+    return deduped
 
 
 def _effective_news_assessment(article, model_result=None):
