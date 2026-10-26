@@ -1,3 +1,2 @@
-# Databricks Apps standard pip image preinstalls Streamlit and databricks-sdk.
-# Keep this file dependency-free for ABN workspaces without package-index DNS/egress.
-# Do not pin a newer SDK unless an approved internal PyPI mirror is available.
+streamlit
+databricks-sdk
