@@ -215,6 +215,7 @@ class GenieRowsTests(unittest.TestCase):
             ),
             _extract_answer_text=lambda msg: msg.content,
             _fetch_query_result=lambda *args: SimpleNamespace(statement_response=None),
+            _get_client=lambda:None,
             _msg_attr=lambda obj,*names:next(
                 (getattr(obj,n) for n in names if getattr(obj,n,None)),None
             ),
@@ -241,6 +242,7 @@ class GenieRowsTests(unittest.TestCase):
             _extract_query_attachment=lambda message: message.attachments[0],
             _extract_answer_text=lambda message:message.content,
             _fetch_query_result=lambda *args:SimpleNamespace(statement_response=None),
+            _get_client=lambda:None,
             _msg_attr=lambda obj,*names:next(
                 (getattr(obj,n) for n in names if getattr(obj,n,None)),None
             ),
