@@ -170,6 +170,24 @@ class ReportedDataTests(unittest.TestCase):
             self.assertEqual(hud.get_data_mode(),"synthetic")
             self.assertIn("mode=synthetic",hud.module_url("news"))
 
+    def test_real_header_and_dialog_dismiss_behaviour_without_synthetic_changes(self):
+        shell=Path("main.py").read_text(encoding="utf-8")
+        self.assertIn("real-command-bar",shell)
+        self.assertIn("grid-template-areas",shell)
+        self.assertIn('"brand basis" "view source"',shell)
+        self.assertIn("view-selector",shell)
+        self.assertIn("source-selector",shell)
+        self.assertIn('"on_dismiss":close_module',shell)
+        self.assertIn('if is_real and not on_dismiss_supported',shell)
+        self.assertIn('RENDERERS[module](s)',shell)
+        from src import hud
+        with patch("src.hud.get_query_value",side_effect=lambda key,default="":{
+            "mode":"synthetic","module":"news","bl":"wm",
+        }.get(key,default)):
+            self.assertEqual(hud.get_data_mode(),"synthetic")
+            self.assertIn("mode=synthetic",hud.module_url("brief"))
+            self.assertIn("mode=real",hud.mode_url("real"))
+
     def test_original_entry_point_keeps_synthetic_path(self):
         main = Path(__file__).resolve().parents[1].joinpath("main.py").read_text()
         self.assertIn("s = build_state(business_line=selected_bl)", main)
