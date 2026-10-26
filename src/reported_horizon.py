@@ -282,18 +282,12 @@ def render_reported_horizon(s):
         )
     st.markdown('<div class="section-title">Where are we heading?</div>',
                 unsafe_allow_html=True)
-    render_html(
-        '<div class="rh-description">Publicly sourced ABN AMRO Group NII/NIM trends '
-        'since 2021, combined with ECB policy-rate history and a small backtested '
-        'forecast. Forecasts and prediction bands are estimates, not reported actuals '
-        'or official management guidance.</div>'
-    )
-    render_html('<div class="rh-pill">22 verified Group quarters · neutral baseline · modelled 90% / 95% ranges</div>')
+    st.caption("Group NII / NIM · historical actuals and modelled outlook")
     try:
         public=load_public_horizon_inputs(s.reported_group)
     except (FileNotFoundError,ValueError,KeyError) as exc:
         st.error("Source check failed: " + str(exc))
-        st.caption("Do not substitute the Synthetic financial datasets.")
+
         return
     # Horizon always displays the automatically selected, unshocked public
     # baseline. ECB shocks and direct financial overlays belong in What-If.
@@ -317,10 +311,7 @@ def render_reported_horizon(s):
     for col,(label,value,detail) in zip(st.columns(3),cards):
         with col:
             render_html(_card(label,value,detail))
-    st.caption(
-        "This view shows the neutral, automatically selected forecast. "
-        "For rate shocks or manual NIM/NII overlays, use the Real Data What-If Engine."
-    )
+
     st.write("")
     chart_col,lens_col=st.columns([1.72,.90],gap="large")
     with chart_col:
@@ -354,12 +345,7 @@ def render_reported_horizon(s):
                             bands=view),
             use_container_width=True,
         )
-        st.caption(
-            "Green = audited public Group NII/NIM actuals. Dashed purple = "
-            "forecast. 90% / 95% bands reflect assumed Gaussian errors scaled "
-            "from limited rolling tests, not bank-approved statistical confidence. "
-            "Horizon holds the ECB policy rate flat; rate scenarios belong in What-If."
-        )
+
     with lens_col:
         render_html(_lens(trajectory,model))
     _validation_details(trajectory,model,public)
@@ -367,13 +353,13 @@ def render_reported_horizon(s):
         '<div class="module-action-row">'
         f'<a class="module-action-link" href="{module_url("scenario")}" target="_self">'
         'Test ECB rates & management overlays in What-If →</a>'
-        '<span class="rh-model-label">Public-model forecast · Real Data mode only</span>'
+
         '</div>'
     )
-    st.caption(
-        "Group forecast research cutoff: Q2 2026. "
-        "Financial actuals: official ABN factsheets Q1 2021–Q2 2026. "
-        "ECB DFR: official rate-change series, averaged by calendar day. "
-        "Separate source checks passed; 90%/95% ranges have NOT been "
-        "demonstrated to deliver those frequencies out of sample."
-    )
+    with st.expander("Sources & forecast limitations",expanded=False):
+        st.caption(
+            "Actuals: ABN AMRO published quarterly NII/NIM (2021–Q2 2026); "
+            "ECB policy-rate observations. Forecasts and 90%/95% bands are "
+            "indicative model estimates, not management guidance or "
+            "validated regulatory confidence limits."
+        )
