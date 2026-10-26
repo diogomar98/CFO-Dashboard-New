@@ -298,6 +298,12 @@ def _verified_query_rows(db, space_id, conversation_id, message_id,
             retried,code=_requery_governed_genie_sql(db,sql)
             if not retried.empty or code=="sql_requery_zero_query_rows":
                 return retried,code
+            # An unrelated SQL allowlist rejection must never conceal the
+            # real API's explicit authorization error.
+            if code=="sql_requery_not_allowlisted" and any(
+                marker in status for marker in ("PermissionError","PermissionDenied","Unauthorized")
+            ):
+                return frame,status
             return frame,code
         return frame,status
     execution = getattr(db, "statement_execution", None)
