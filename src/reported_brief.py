@@ -357,7 +357,7 @@ def _primary_cards(s, data):
                 ):
                     from src.reported_copilot_balloon import prepare_cet1_investigation
                     prepare_cet1_investigation()
-                    st.caption("CET1 question prepared in the floating Copilot.")
+
 
 
 def _details(frame, key, unit, name, s):
@@ -366,7 +366,7 @@ def _details(frame, key, unit, name, s):
         st.info("No source-backed data available for this metric.")
         return
     st.markdown(f"#### {name} · historical drilldown")
-    st.caption(f"{stat['quarter']} · Actual reported figures, not estimated or forecast")
+
     c1, c2, c3 = st.columns(3)
     with c1:
         st.metric("Reported actual", _amount(stat["now"], unit))
@@ -410,28 +410,16 @@ def _details(frame, key, unit, name, s):
             st.markdown("**Next**")
             st.write(match["next"])
             return
-    st.caption(
-        "This analysis is limited to sourced quarterly levels and their calculated "
-        "QoQ/YoY movements. Causal attribution and management thresholds are "
-        "not inferred from the factsheet."
-    )
+
 
 
 def _expanded_grid(s, frame):
     metrics = () if s.business_line else METRICS
     st.markdown("### Figures at a glance")
     if s.business_line:
-        st.info(
-            "Only segment loans, deposits and RWA are disclosed in this data package "
-            "and those are already shown above. Use the headline cards' Inspect "
-            "quarterly trend action for the complete segment history; additional "
-            "segment KPIs have not been invented."
-        )
+        st.caption("Select a headline card above to explore reported segment trends.")
     else:
-        st.caption(
-            "Six additional KPIs · last five reported quarters · "
-            "bar heights include zero · latest quarter highlighted"
-        )
+
 
     for start in range(0, len(metrics), 3):
         cols = st.columns(3, gap="medium")
@@ -731,7 +719,7 @@ def render_reported_brief(s):
     st.markdown("#### Executive commentary")
     for sentence in _key_insights(s):
         st.write("• " + sentence)
-    st.caption("Figures are quarterly reported actuals. Momentum signals are not bank-approved RAG thresholds.")
+
 
     open_now = st.session_state.get("rb_expanded", False)
     if st.button(
@@ -748,4 +736,4 @@ def render_reported_brief(s):
 
     render_html('<div class="rb-section-break"></div>')
     _external_news()
-    st.caption("Source: ABN AMRO Q2 2026 factsheet · Quarterly P&L and quarter-end balances.")
+
