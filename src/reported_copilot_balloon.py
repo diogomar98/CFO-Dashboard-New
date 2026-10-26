@@ -437,6 +437,7 @@ def _send(question,evidence,history,*,method="factsheet"):
         assistant["data"]=result.get("data")
         assistant["has_rows"]=result.get("has_rows",False)
         assistant["query_rows_status"]=result.get("query_rows_status","unavailable")
+        assistant["sdk_runtime"]=result.get("sdk_runtime",{})
         if thread:
             thread["genie_conversation_id"]=result.get("conversation_id")
     history.extend([
@@ -528,6 +529,18 @@ def _genie_provenance(item):
                 (explanation or "No SQL query-result rows were available.")
                 +" Numerical conclusions are not verified in this app."
             )
+        runtime=item.get("sdk_runtime") or {}
+        if runtime:
+            with st.expander("Connection diagnostics",expanded=False):
+                st.caption(
+                    "Databricks SDK: "
+                    +str(runtime.get("sdk_version","unknown"))+
+                    " · Genie attachment result API: "+
+                    ("available" if runtime.get("has_current_genie_result_method") else "missing")+
+                    " · SQL execution API: "+
+                    ("available" if runtime.get("has_sql_execute_method") else "missing")+
+                    " · Auth: "+str(runtime.get("user_auth_context","unknown"))
+                )
 
 
 
