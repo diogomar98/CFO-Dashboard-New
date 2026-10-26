@@ -41,6 +41,28 @@ class RealGenieIsolationTests(unittest.TestCase):
             self.assertFalse(real_genie_configured())
             self.assertEqual(real_genie_space_id(),"")
 
+    def test_copilot_inspector_has_no_nested_streamlit_expanders(self):
+        # Streamlit raises StreamlitAPIException when expanders are nested.
+        # The Genie inspector must use only one expander for SQL and diagnostics.
+        import ast
+        tree=ast.parse(Path("src/reported_copilot_balloon.py").read_text())
+        inspector=next(
+            node for node in tree.body
+            if isinstance(node,(ast.FunctionDef,ast.AsyncFunctionDef))
+            and node.name=="_genie_provenance"
+        )
+        expanders=[
+            node for node in ast.walk(inspector)
+            if isinstance(node,ast.Call)
+            and isinstance(node.func,ast.Attribute)
+            and node.func.attr=="expander"
+        ]
+        self.assertEqual(len(expanders),1)
+        source=ast.get_source_segment(
+            Path("src/reported_copilot_balloon.py").read_text(),inspector
+        )
+        self.assertIn("Connection diagnostics",source)
+
     def test_question_is_bounded_and_nonempty(self):
         for q in ("","  ","a"*1201,None):
             with self.assertRaises(ValueError):
