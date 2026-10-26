@@ -99,6 +99,23 @@ def get_business_line():
     return bl if bl in BUSINESS_LINES else None
 
 
+def get_data_mode():
+    """Real Data opens by default; Synthetic remains explicitly selectable."""
+    return "synthetic" if get_query_value("mode", "real").lower() == "synthetic" else "real"
+
+
+def _mode_query_param():
+    return "&mode=" + get_data_mode()
+
+
+def mode_url(mode):
+    """Switch data sources and reopen home, preserving business-line selection."""
+    if mode not in {"synthetic", "real"}:
+        raise ValueError("Unsupported data mode")
+    suffix = "&mode=" + mode
+    return f"?enter=1{_bl_query_param()}{suffix}"
+
+
 def _bl_query_param():
     """The ``&bl=…`` fragment for the current selection, URL-safe."""
     bl = get_business_line()
@@ -117,8 +134,8 @@ def bl_url(business_line=None, module=None):
     else:
         bl_param = ""
     if module == "home":
-        return f"?enter=1{bl_param}"
-    return f"?module={module}{bl_param}"
+        return f"?enter=1{bl_param}{_mode_query_param()}"
+    return f"?module={module}{bl_param}{_mode_query_param()}"
 
 
 def navigate_to_module(module):
@@ -141,21 +158,26 @@ def close_module():
     Called when a section window is dismissed. The ``enter`` flag keeps the
     viewer past the greeting screen.
     """
+    mode = get_data_mode()
+    current_bl = get_business_line()
     st.query_params.clear()
     st.query_params["enter"] = "1"
+    st.query_params["mode"] = mode
+    if current_bl:
+        st.query_params["bl"] = _BL_URL_REV.get(current_bl,current_bl)
 
 
 def module_url(module):
     """A section's link: it opens as a window over the home page."""
     bl_param = _bl_query_param()
     if module == "home":
-        return f"?enter=1{bl_param}"
-    return f"?module={module}{bl_param}"
+        return f"?enter=1{bl_param}{_mode_query_param()}"
+    return f"?module={module}{bl_param}{_mode_query_param()}"
 
 
 def investigate_url(topic):
     """One-click handoff from a decision lens into the Copilot."""
-    return f"?module=copilot&investigate={topic}{_bl_query_param()}"
+    return f"?module=copilot&investigate={topic}{_bl_query_param()}{_mode_query_param()}"
 
 
 def active_class(module, selected_module):
@@ -179,7 +201,7 @@ def has_entered():
 
 def enter_url():
     """The greeting screen's way into the cockpit."""
-    return f"?enter=1{_bl_query_param()}"
+    return f"?enter=1{_bl_query_param()}{_mode_query_param()}"
 
 
 # ------------------------------------------------------------------

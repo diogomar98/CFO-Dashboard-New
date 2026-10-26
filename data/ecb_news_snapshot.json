@@ -1,0 +1,235 @@
+{
+  "source_type": "official_ecb_rss",
+  "retrieved_at_utc": "2026-10-22T16:24:08+00:00",
+  "description": "Verified ECB RSS headlines; not a continuously refreshing news feed",
+  "articles": [
+    {
+      "id": "072d53504945317d",
+      "headline": "Piero Cipollone: Pontes and Appia: unlocking opportunities for banks",
+      "url": "https://www.ecb.europa.eu//press/key/date/2026/html/ecb.sp261021_1~d190f2c349.en.pdf",
+      "source": "ECB press releases",
+      "published": "2026-10-21T08:00:00+00:00",
+      "summary": "",
+      "relevant_terms": []
+    },
+    {
+      "id": "9d0c3f7fb6db288c",
+      "headline": "Philip R. Lane: Euro liquidity lines and the international monetary system",
+      "url": "https://www.ecb.europa.eu//press/key/date/2026/html/ecb.sp261021~401d6c4b70.en.html",
+      "source": "ECB press releases",
+      "published": "2026-10-21T04:15:00+00:00",
+      "summary": "",
+      "relevant_terms": [
+        "liquidity"
+      ]
+    },
+    {
+      "id": "5ae656fe6f6b5ffe",
+      "headline": "Euro area monthly balance of payments: August 2026",
+      "url": "https://www.ecb.europa.eu//press/stats/bop/2026/html/ecb.bp261020~679813bbc5.en.html",
+      "source": "ECB statistical releases",
+      "published": "2026-10-20T08:00:00+00:00",
+      "summary": "",
+      "relevant_terms": []
+    },
+    {
+      "id": "0de9b4c1021a7c35",
+      "headline": "Frank Elderson: Interview with Die Presse",
+      "url": "https://www.ecb.europa.eu//press/inter/date/2026/html/ecb.in261020~97e2e4bc38.en.html",
+      "source": "ECB press releases",
+      "published": "2026-10-20T07:00:00+00:00",
+      "summary": "",
+      "relevant_terms": []
+    },
+    {
+      "id": "6dad08c6a40d3fde",
+      "headline": "Frank Elderson: From climate and nature risks to economic resilience and competitiveness",
+      "url": "https://www.ecb.europa.eu//press/key/date/2026/html/ecb.sp261019~f0a3e053de.en.html",
+      "source": "ECB press releases",
+      "published": "2026-10-19T06:00:00+00:00",
+      "summary": "",
+      "relevant_terms": []
+    },
+    {
+      "id": "06f5c3b3308e77d0",
+      "headline": "Christine Lagarde: IMFC Statement",
+      "url": "https://www.ecb.europa.eu//press/key/date/2026/html/ecb.sp261017~7015ea3099.en.html",
+      "source": "ECB press releases",
+      "published": "2026-10-17T05:00:00+00:00",
+      "summary": "",
+      "relevant_terms": []
+    },
+    {
+      "id": "9b6e93b48f207022",
+      "headline": "Frank Elderson: Ensuring resilience in the face of uncertainty",
+      "url": "https://www.ecb.europa.eu//press/key/date/2026/html/ecb.sp261014~e4ca33588e.en.html",
+      "source": "ECB press releases",
+      "published": "2026-10-14T00:00:00+00:00",
+      "summary": "",
+      "relevant_terms": []
+    },
+    {
+      "id": "2c9018217f537673",
+      "headline": "Philip R. Lane: The AI opportunity for Europe",
+      "url": "https://www.ecb.europa.eu//press/key/date/2026/html/ecb.sp261013~9db9bf4fd6.en.html",
+      "source": "ECB press releases",
+      "published": "2026-10-13T18:30:00+00:00",
+      "summary": "",
+      "relevant_terms": []
+    },
+    {
+      "id": "a37490dc6bf90744",
+      "headline": "Meeting of 9-10 September 2026",
+      "url": "https://www.ecb.europa.eu//press/accounts/2026/html/ecb.mg261008~a10153d090.en.html",
+      "source": "ECB statistical releases",
+      "published": "2026-10-08T11:30:00+00:00",
+      "summary": "",
+      "relevant_terms": []
+    },
+    {
+      "id": "69f37d867634f068",
+      "headline": "Piero Cipollone: Interview with Corriere della Sera",
+      "url": "https://www.ecb.europa.eu//press/inter/date/2026/html/ecb.in261008~3184e7d0d0.en.html",
+      "source": "ECB press releases",
+      "published": "2026-10-08T06:00:00+00:00",
+      "summary": "",
+      "relevant_terms": []
+    },
+    {
+      "id": "a8eb6bf790b72864",
+      "headline": "Results of the September 2026 survey on credit terms and conditions in euro-denominated securities financing and OTC derivatives markets (SESFOD)",
+      "url": "https://www.ecb.europa.eu//press/pr/date/2026/html/ecb.pr261007~6447350434.en.html",
+      "source": "ECB press releases",
+      "published": "2026-10-07T08:00:00+00:00",
+      "summary": "",
+      "relevant_terms": [
+        "credit"
+      ]
+    },
+    {
+      "id": "28500ac6a43a82aa",
+      "headline": "Frank Elderson: Effective supervision through timely remediation",
+      "url": "https://www.ecb.europa.eu//press/key/date/2026/html/ecb.sp261006_1~0df91e4e44.en.html",
+      "source": "ECB press releases",
+      "published": "2026-10-06T13:00:00+00:00",
+      "summary": "",
+      "relevant_terms": []
+    },
+    {
+      "id": "83020bb1c63ef28c",
+      "headline": "Piero Cipollone: Money in the digital age: digital euro, tokenisation and the role of central banks",
+      "url": "https://www.ecb.europa.eu//press/key/date/2026/html/ecb.sp261006~0da978f159.en.html",
+      "source": "ECB press releases",
+      "published": "2026-10-06T13:00:00+00:00",
+      "summary": "",
+      "relevant_terms": []
+    },
+    {
+      "id": "6e91d203ed24e708",
+      "headline": "Philip R. Lane: Interview with Ansa",
+      "url": "https://www.ecb.europa.eu//press/inter/date/2026/html/ecb.in261006~bc94400297.en.html",
+      "source": "ECB press releases",
+      "published": "2026-10-06T07:00:00+00:00",
+      "summary": "",
+      "relevant_terms": []
+    },
+    {
+      "id": "f4c67ec69a48b6b6",
+      "headline": "Philip R. Lane: Diagnostic Challenges for ECB Monetary Policy",
+      "url": "https://www.ecb.europa.eu//press/key/date/2026/html/ecb.sp261005~1d8d998ef4.en.html",
+      "source": "ECB press releases",
+      "published": "2026-10-05T08:00:00+00:00",
+      "summary": "",
+      "relevant_terms": [
+        "monetary policy"
+      ]
+    },
+    {
+      "id": "2837bd77bb1bb249",
+      "headline": "Decisions taken by the Governing Council of the ECB (in addition to decisions setting interest rates)",
+      "url": "https://www.ecb.europa.eu//press/govcdec/otherdec/2026/html/ecb.gc261002~54c6b5672b.en.html",
+      "source": "ECB press releases",
+      "published": "2026-10-02T13:00:00+00:00",
+      "summary": "",
+      "relevant_terms": [
+        "interest rate"
+      ]
+    },
+    {
+      "id": "c87a95ad7458903f",
+      "headline": "Households and non-financial corporations in the euro area: second quarter of 2026",
+      "url": "https://www.ecb.europa.eu//press/stats/ffi/html/ecb.eaefd_early2026q2~444dc6a8ee.en.html",
+      "source": "ECB statistical releases",
+      "published": "2026-10-02T09:00:00+00:00",
+      "summary": "",
+      "relevant_terms": []
+    },
+    {
+      "id": "3e81c35f5cd39422",
+      "headline": "Euro area quarterly balance of payments and international investment position: second quarter of 2026",
+      "url": "https://www.ecb.europa.eu//press/stats/bop/2026/html/ecb.bq261002~5e0dd6a1f4.en.html",
+      "source": "ECB statistical releases",
+      "published": "2026-10-02T08:00:00+00:00",
+      "summary": "",
+      "relevant_terms": []
+    },
+    {
+      "id": "36d6677c01372a08",
+      "headline": "Euro area bank interest rate statistics: August 2026",
+      "url": "https://www.ecb.europa.eu//press/stats/mfi/html/ecb.mir2610~8e4898ad10.en.html",
+      "source": "ECB statistical releases",
+      "published": "2026-10-01T08:00:00+00:00",
+      "summary": "",
+      "relevant_terms": [
+        "interest rate"
+      ]
+    },
+    {
+      "id": "15e4fce9012c411e",
+      "headline": "Monetary developments in the euro area: August 2026",
+      "url": "https://www.ecb.europa.eu//press/stats/md/html/ecb.md2608~406f8d243d.en.html",
+      "source": "ECB statistical releases",
+      "published": "2026-09-25T08:00:00+00:00",
+      "summary": "",
+      "relevant_terms": []
+    },
+    {
+      "id": "b35f8e0367f7129e",
+      "headline": "Euro area monthly balance of payments: July 2026",
+      "url": "https://www.ecb.europa.eu//press/stats/bop/2026/html/ecb.bp260918~ef4843e4f5.en.html",
+      "source": "ECB statistical releases",
+      "published": "2026-09-18T08:00:00+00:00",
+      "summary": "",
+      "relevant_terms": []
+    },
+    {
+      "id": "5edd4474b5253b3b",
+      "headline": "Euro area bank interest rate statistics: July 2026",
+      "url": "https://www.ecb.europa.eu//press/stats/mfi/html/ecb.mir260902~d54675e442.en.html",
+      "source": "ECB statistical releases",
+      "published": "2026-09-02T08:00:00+00:00",
+      "summary": "",
+      "relevant_terms": [
+        "interest rate"
+      ]
+    },
+    {
+      "id": "28f13f1f34da5f93",
+      "headline": "Meeting of 22-23 July 2026",
+      "url": "https://www.ecb.europa.eu//press/accounts/2026/html/ecb.mg260827~f06c21fd54.en.html",
+      "source": "ECB statistical releases",
+      "published": "2026-08-27T11:30:00+00:00",
+      "summary": "",
+      "relevant_terms": []
+    },
+    {
+      "id": "1575bdf3770736d6",
+      "headline": "Monetary developments in the euro area: July 2026",
+      "url": "https://www.ecb.europa.eu//press/stats/md/html/ecb.md2607~e7127e7d02.en.html",
+      "source": "ECB statistical releases",
+      "published": "2026-08-27T08:00:00+00:00",
+      "summary": "",
+      "relevant_terms": []
+    }
+  ]
+}

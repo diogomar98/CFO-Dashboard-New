@@ -13,6 +13,8 @@ import html
 import streamlit as st
 
 from src.cockpit_state import build_state
+from src.kpi_sparklines import SPARKLINE_CSS, sparkline_html
+from src.real_data_mode import build_reported_state, render_reported_module
 from src.extended_data_loader import datasets_available
 from src.hud import (
     BUSINESS_LINES,
@@ -23,6 +25,8 @@ from src.hud import (
     enter_url,
     explain_panel,
     get_business_line,
+    get_data_mode,
+    mode_url,
     get_selected_module,
     has_entered,
     module_url,
@@ -43,12 +47,52 @@ st.set_page_config(
 
 from src.openai_partner import test_llm
 
-if st.button("Test LLM"):
+# The prototype connectivity test must not be confused with the reported-data Copilot.
+if get_data_mode() == "synthetic" and st.button("Test LLM"):
     st.write(test_llm())
 
 # Emitted in cascade order; LOCAL_CSS last so this cockpit's overrides win.
 for stylesheet in (BASE_CSS, EXTENSIONS_CSS, PANELS_CSS, LOCAL_CSS):
     render_html(stylesheet)
+if get_data_mode() == "real":
+    render_html(SPARKLINE_CSS)
+    # Scoped: Synthetic header and its original styling are unchanged.
+    render_html("""
+    <style>
+      .hud-hero.real-command-bar {
+        display:grid;grid-template-columns:minmax(0,1fr) auto;
+        grid-template-areas:"brand basis" "view source";
+        align-items:center;gap:.48rem 1.1rem;
+        padding:.82rem 1.12rem;
+      }
+      .real-command-bar > .hero-home-link {grid-area:brand;min-width:0;}
+      .real-command-bar > .hero-status-row {
+        grid-area:basis;justify-content:flex-end;
+        margin:0;flex-wrap:nowrap;
+      }
+      .real-command-bar > .view-selector {
+        grid-area:view;justify-content:flex-start;margin:0;
+        min-width:0;flex-wrap:wrap;
+      }
+      .real-command-bar > .source-selector {
+        grid-area:source;justify-content:flex-end;margin:0;
+        white-space:nowrap;
+      }
+      .real-command-bar .bl-selector-row {margin-top:0;}
+      .real-command-bar .data-pill {padding:.27rem .54rem;font-size:.60rem;}
+      .real-command-bar a.bl-pill {font-size:.60rem;padding:.24rem .52rem;}
+      @media(max-width:1050px){
+        .hud-hero.real-command-bar {
+          grid-template-columns:minmax(0,1fr);
+          grid-template-areas:"brand" "basis" "view" "source";
+          gap:.48rem;
+        }
+        .real-command-bar > .hero-status-row,
+        .real-command-bar > .source-selector {justify-content:flex-start;}
+        .real-command-bar > .hero-status-row {flex-wrap:wrap;}
+      }
+    </style>
+    """)
 
 # The greeting stands alone: no state, no data load, one way forward.
 if not has_entered():
@@ -56,7 +100,7 @@ if not has_entered():
         f"""
         <div class="cockpit-gate">
             <div class="gate-kicker">CFO Command Center</div>
-            <h1 class="gate-greeting">Good afternoon <strong>Ferdi</strong></h1>
+            <h1 class="gate-greeting">Good morning <strong>Ferdi</strong></h1>
             <a class="gate-orb" href="{enter_url()}" target="_self" aria-label="Start explore">
                 <span class="core-orbit-html" aria-hidden="true"></span>
                 <span class="core-reactor-html" aria-hidden="true"></span>
@@ -73,11 +117,25 @@ if not has_entered():
     st.stop()
 
 selected_bl = get_business_line()
-s = build_state(business_line=selected_bl)
+data_mode = get_data_mode()
+is_real = data_mode == "real"
+if is_real:
+    # Deliberately never fall back to synthetic metrics when real data is selected.
+    try:
+        s = build_reported_state(business_line=selected_bl)
+    except (FileNotFoundError, ValueError) as exc:
+        st.error(f"Real Data mode is unavailable: {exc}")
+        st.info("Select Synthetic to return to the existing working prototype.")
+        render_html(f'<a href="{mode_url("synthetic")}" target="_self">Switch to Synthetic</a>')
+        st.stop()
+else:
+    s = build_state(business_line=selected_bl)
 selected_module = get_selected_module()
 
-# One-click handoffs from a decision lens must arm the Copilot before it renders.
-consume_investigation_topic(selected_module)
+# Existing synthetic Copilot handoffs are untouched; reported mode does not
+# route an investigation into the synthetic data-backed assistant.
+if not is_real:
+    consume_investigation_topic(selected_module)
 
 
 # ============================================================
@@ -117,25 +175,41 @@ else:
         f'{weather_label}{weather_range}</span>'
     )
 
+# Preserve the main HUD while visibly differentiating published quarter-end
+# actuals from synthetic daily/mid-month readings.
+date_pill = (
+    "" if is_real else f"Live data / {s.live_date}"
+)
+summary_pill = (
+    "Q2 2026 financials · QoQ" if is_real
+    else f"{s.executive_change_count} changes summarized"
+)
+switch_css = lambda candidate: "is-active" if data_mode == candidate else ""
+
 # One frozen line: the identity, the dates the cockpit is reading, and the
 # local conditions.
 render_html(
     f"""
-    <div class="hud-hero" id="command-bar">
+    <div class="hud-hero{' real-command-bar' if is_real else ''}" id="command-bar">
         <a class="system-kicker hero-home-link" href="{module_url('home')}" target="_self"
            aria-label="Back to the CFO overview">
             <span class="hero-home-glyph" aria-hidden="true">&#8962;</span>
             AI CFO COMMAND CENTER{bl_context_label}
         </a>
         <div class="hero-status-row">
-            <span class="data-pill">Live data / {s.live_date}</span>
-            <span class="data-pill">Close / {s.close_date}</span>
-            <span class="data-pill">{s.executive_change_count} changes summarized</span>
+            <span class="data-pill">{date_pill}</span>
+            {"" if is_real else f'<span class="data-pill">Close / {s.close_date}</span>'}
+            <span class="data-pill">{summary_pill}</span>
             {weather_pill}
         </div>
-        <div class="bl-selector-row">
+        <div class="bl-selector-row view-selector">
             <span class="bl-selector-label">View</span>
             {bl_pills}
+        </div>
+        <div class="bl-selector-row source-selector">
+            <span class="bl-selector-label">Data source</span>
+            <a class="bl-pill {switch_css('synthetic')}" href="{mode_url('synthetic')}" target="_self" aria-label="Use synthetic prototype data">Synthetic</a>
+            <a class="bl-pill {switch_css('real')}" href="{mode_url('real')}" target="_self" aria-label="Use ABN AMRO reported quarterly data">Real Data · ABN AMRO</a>
         </div>
     </div>
     """
@@ -151,11 +225,23 @@ def kpi_slot(card):
     delta_unit = card.get("delta_unit", "pp")
     # Cards state their own comparison window; month-on-month is the default.
     delta_label = card.get("delta_label", f"vs {s.previous_month_label}")
+    # A trend is shown only when the card supplies matching observed history.
+    # This leaves the original Synthetic KPI markup completely unchanged.
+    trend_values = card.get("trend_values") if is_real else None
+    trend_svg = sparkline_html(
+        trend_values, label=card["label"], period="quarters",
+        dates=card.get("trend_dates"),
+    ) if trend_values else ""
+    value_markup = (
+        f'<div class="kpi-reading-row"><div class="kpi-value">{card["value"]}</div>'
+        f'{trend_svg}</div>'
+        if trend_svg else f'<div class="kpi-value">{card["value"]}</div>'
+    )
     return f"""
     <div class="kpi-slot" tabindex="0">
         <div class="kpi-card">
             <div class="kpi-label">{card['label']}</div>
-            <div class="kpi-value">{card['value']}</div>
+            {value_markup}
             <div class="executive-delta">{arrow_delta(card['delta_pp'], unit=delta_unit)} {delta_label}</div>
             <div class="executive-context">{card['context']}</div>
             <div class="kpi-badges">{rag_badge(card['rag'])}</div>
@@ -181,7 +267,22 @@ def dial(module):
 
 
 selection_class = "has-selection" if selected_module != "home" else ""
-horizon_confidence = confidence_label(s.conf_horizon_ye_nim)
+horizon_confidence = confidence_label(s.conf_horizon_ye_nim) if not is_real else "Not modelled"
+nim_headline = (
+    "Group-level NIM only"
+    if is_real and selected_bl
+    else (f"NIM {s.cert_current_nim:.2f}% · {s.nim_mom_bps:+.1f} bps QoQ"
+          if is_real else
+          f"NIM {s.cert_current_nim:.2f}% · {s.nim_mom_bps:+.1f} bps MoM")
+)
+horizon_headline = (
+    "Group NIM · NII outlook" if is_real
+    else f"YE NIM {s.horizon_year_end_nim:.2f}% · conf {horizon_confidence}"
+)
+scenario_headline = (
+    "ECB rates · scenario analysis" if is_real
+    else "ECB ±100 bps · 365D max"
+)
 
 dial_column = f"""
 <div class="integrated-system {selection_class}" id="radial-command">
@@ -192,9 +293,9 @@ dial_column = f"""
                 <a class="css-sector css-sector-brief {dial('brief')}" href="{module_url('brief')}" target="_self" aria-label="Open Morning Brief" title="Morning Brief — click to open"><span class="dial-hit-copy">Morning Brief</span></a>
                 <a class="css-sector css-sector-horizon {dial('horizon')}" href="{module_url('horizon')}" target="_self" aria-label="Open Horizon" title="Horizon — click to open"><span class="dial-hit-copy">Horizon</span></a>
                 <a class="css-sector css-sector-scenario {dial('scenario')}" href="{module_url('scenario')}" target="_self" aria-label="Open What-If Engine" title="What-If Engine — click to open"><span class="dial-hit-copy">What-If Engine</span></a>
-                <span class="sector-label-html sector-label-brief {dial('brief')}"><strong class="sector-title-html">Morning Brief</strong><span class="sector-metric-html">NIM {s.cert_current_nim:.2f}% · {s.nim_mom_bps:+.1f} bps MoM</span><span class="sector-sub-html">News · changes · RAG</span></span>
-                <span class="sector-label-html sector-label-horizon {dial('horizon')}"><strong class="sector-title-html">Horizon</strong><span class="sector-metric-html">YE NIM {s.horizon_year_end_nim:.2f}% · conf {horizon_confidence}</span><span class="sector-sub-html">Trend · run-rate · confidence</span></span>
-                <span class="sector-label-html sector-label-scenario {dial('scenario')}"><strong class="sector-title-html">What-If Engine</strong><span class="sector-metric-html">ECB ±100 bps · 365D max</span><span class="sector-sub-html">Simulate · quantify · compare</span></span>
+                <span class="sector-label-html sector-label-brief {dial('brief')}"><strong class="sector-title-html">Morning Brief</strong><span class="sector-metric-html">{nim_headline}</span><span class="sector-sub-html">News · changes · RAG</span></span>
+                <span class="sector-label-html sector-label-horizon {dial('horizon')}"><strong class="sector-title-html">Horizon</strong><span class="sector-metric-html">{horizon_headline}</span><span class="sector-sub-html">Trend · run-rate · confidence</span></span>
+                <span class="sector-label-html sector-label-scenario {dial('scenario')}"><strong class="sector-title-html">What-If Engine</strong><span class="sector-metric-html">{scenario_headline}</span><span class="sector-sub-html">Simulate · quantify · compare</span></span>
                 <span class="dial-spoke-html dial-spoke-a" aria-hidden="true"></span><span class="dial-spoke-html dial-spoke-b" aria-hidden="true"></span><span class="dial-spoke-html dial-spoke-c" aria-hidden="true"></span>
                 <a class="css-core {dial('copilot')}" href="{module_url('copilot')}" target="_self" aria-label="Open CFO Copilot" title="Ask CFO Copilot — click to open"><span class="core-orbit-html" aria-hidden="true"></span><span class="core-reactor-html" aria-hidden="true"></span><span class="core-scan-html" aria-hidden="true"></span><span class="core-copy-html"><span class="core-code-html">AI / Investigate</span><strong class="core-main-html">Ask CFO<br>Copilot</strong><span class="core-online-html">Question → evidence</span><span class="core-hint-html">Select core to investigate</span></span></a>
                 <span class="dial-cardinal-html dial-cardinal-n" aria-hidden="true">N / 000</span><span class="dial-cardinal-html dial-cardinal-e" aria-hidden="true">E / 090</span><span class="dial-cardinal-html dial-cardinal-s" aria-hidden="true">S / 180</span><span class="dial-cardinal-html dial-cardinal-w" aria-hidden="true">W / 270</span>
@@ -215,6 +316,19 @@ top_strategy_name = (
 news_focus = html.escape(str(s.geo_focus["country"])) if s.geo_focus is not None else "—"
 
 lenses = [
+    (
+        "news", "◇", "News", "26 external news signals",
+        "NL · DE · FR · BE · Europe", s.ratings["news_attention"], None,
+    ),
+    (
+        "treasury", "△", "Treasury", "Reported aggregate holdings",
+        "LCR · NSFR · financial investments", s.ratings["treasury_rate50"], None,
+    ),
+    (
+        "peers", "◌", "Peers", "Benchmarking pending",
+        "Peer disclosures are a separate source", s.ratings["peer_roe"], None,
+    ),
+] if is_real else [
     (
         "news", "◇", "News",
         f"{news_focus} highest attention",
@@ -244,6 +358,9 @@ lenses = [
 
 def lens_box(module, icon, title, metric, sub, reading, confidence):
     conf_html = "" if confidence is None else confidence_badge(confidence)
+    # Real News is a prototype editorial feed; there is no bank-approved
+    # RAG for news. Remove the distracting Awaiting Data badge entirely.
+    status_html = "" if (is_real and module in {"news","peers"}) else rag_badge(reading)
     return f"""
     <a class="dock-action lens-box {dial(module)}" href="{module_url(module)}" target="_self">
         <span class="dock-icon">{icon}</span>
@@ -251,7 +368,7 @@ def lens_box(module, icon, title, metric, sub, reading, confidence):
             <strong class="dock-title">{title}</strong>
             <span class="lens-metric">{metric}</span>
             <span class="dock-metric">{html.escape(sub)}</span>
-            <span class="kpi-badges">{rag_badge(reading)}{conf_html}</span>
+            <span class="kpi-badges">{status_html}{conf_html}</span>
         </span>
     </a>
     """
@@ -284,46 +401,80 @@ def open_window(module):
     so the next run draws the home page on its own.
     """
     title, description = MODULE_METADATA[module]
+    if is_real:
+        description = ""
 
-    @st.dialog(title)
+    import inspect
+    # Newer Streamlit supports a true dismissal callback (X / ESC / outside).
+    # Older versions retain the explicit Home action inside the dialog.
+    on_dismiss_supported="on_dismiss" in inspect.signature(st.dialog).parameters
+    options={"on_dismiss":close_module} if on_dismiss_supported else {}
+
+    @st.dialog(title, **options)
     def window():
-        render_html(f'<div class="window-subtitle">{description}</div>')
+        if is_real and not on_dismiss_supported and st.button("← Back to Home",key="real_window_close_"+module):
+            close_module()
+            st.rerun()
+        if description:
+            render_html(f'<div class="window-subtitle">{description}</div>')
 
         # A signal pushed here from the News window explains itself once.
         applied_signal = st.session_state.pop("scenario_from_signal", None)
         if applied_signal and module == "scenario":
             st.info(f"Assumptions pre-filled from an overnight news signal: {applied_signal}.")
 
-        RENDERERS[module](s)
+        if is_real:
+            render_reported_module(module, s)
+            # Jarvis is a separate always-available assistant, including
+            # alongside the central Ask CFO Copilot report.
+            from src.reported_copilot_balloon import render_floating_copilot
+            render_floating_copilot(s)
+        else:
+            RENDERERS[module](s)
 
     window()
 
 
 if selected_module != "home":
     open_window(selected_module)
+elif is_real:
+    # Home has no modal; mount the same Copilot directly on the main report.
+    from src.reported_copilot_balloon import render_floating_copilot
+    render_floating_copilot(s)
 
 
 # ============================================================
 # SYSTEM FOOTER
 # ============================================================
 
-dataset_status = datasets_available()
-missing_datasets = [name for name, ok in dataset_status.items() if not ok]
-
-if missing_datasets:
-    dataset_note = (
-        f"{len(missing_datasets)} dataset(s) missing — run "
-        "python -m src.generators.generate_all_data"
-    )
+if is_real:
+    dataset_note = ""
 else:
-    dataset_note = f"{len(dataset_status)} datasets loaded"
+    dataset_status = datasets_available()
+    missing_datasets = [name for name, ok in dataset_status.items() if not ok]
+    if missing_datasets:
+        dataset_note = (
+            f"{len(missing_datasets)} dataset(s) missing — run "
+            "python -m src.generators.generate_all_data"
+        )
+    else:
+        dataset_note = f"{len(dataset_status)} datasets loaded"
+
+footer_provenance = (
+    "ABN AMRO · Q2 2026"
+    if is_real else "Synthetic data · illustrative only · not for financial decisions"
+)
+footer_date = (
+    f"Reported close / {s.close_date}" if is_real
+    else f"Live data / {s.live_date} · close / {s.close_date}"
+)
 
 render_html(
     f"""
     <div class="system-footer">
-        <span>Synthetic data · illustrative only · not for financial decisions</span>
-        <span>{dataset_note}</span>
-        <span>Live data / {s.live_date} · close / {s.close_date}</span>
+        <span>{footer_provenance}</span>
+        {"" if is_real else f"<span>{dataset_note}</span>"}
+        {"" if is_real else f"<span>{footer_date}</span>"}
     </div>
     """
 )
