@@ -56,6 +56,11 @@ def _typed_value(value):
 def decode_genie_rows(response, *, max_rows=50):
     """Return (DataFrame, status) without making up missing observations."""
     statement = _field(response, "statement_response", "statementResponse")
+    # Some SDK/client versions return StatementResponse directly rather than
+    # wrapping it in GenieGetMessageQueryResultResponse.statement_response.
+    if statement is None and (_field(response, "manifest") is not None
+                              or _field(response, "result") is not None):
+        statement = response
     if statement is None:
         return pd.DataFrame(), "missing_statement_response"
     result = _field(statement, "result")
