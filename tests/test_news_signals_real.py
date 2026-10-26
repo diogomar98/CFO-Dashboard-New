@@ -95,6 +95,15 @@ class RealNewsSignalsTests(unittest.TestCase):
             filter_financial_news(self.news,self.assessments,direction="Profitable")
         with self.assertRaises(ValueError):
             filter_financial_news(self.news,self.assessments,metric="Invented Metric")
+        inflation=filter_financial_news(
+            self.news,self.assessments,category="Inflation & Monetary Policy"
+        )
+        self.assertTrue(inflation)
+        self.assertTrue(all(
+            a["category"]=="Inflation & Monetary Policy" for a in inflation
+        ))
+        with self.assertRaises(ValueError):
+            filter_financial_news(self.news,self.assessments,category="Invented Category")
 
     def test_curated_snapshot_is_still_separate_and_synthetic_unchanged(self):
         from src.reported_news import recent_official_articles
@@ -106,12 +115,12 @@ class RealNewsSignalsTests(unittest.TestCase):
         code=Path("src/reported_news.py").read_text(encoding="utf-8")
         self.assertIn("rn_filter_country",code)
         self.assertIn("rn_filter_relevance",code)
-        self.assertIn("rn_filter_segment",code)
+        self.assertIn("rn_filter_category",code)
         self.assertIn("rn_filter_metric",code)
         self.assertIn("rn_filter_direction",code)
         self.assertIn("rn-country-title",code)
         self.assertIn("news_signals",code)
-        self.assertIn("do not",code.lower())
+        self.assertIn("prototype",code.lower())
         original=Path("src/modules/news.py").read_text(encoding="utf-8")
         self.assertIn("def render_news(s)",original)
 
