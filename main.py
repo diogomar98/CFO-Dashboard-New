@@ -100,7 +100,7 @@ if not has_entered():
         f"""
         <div class="cockpit-gate">
             <div class="gate-kicker">CFO Command Center</div>
-            <h1 class="gate-greeting">Good afternoon <strong>Ferdi</strong></h1>
+            <h1 class="gate-greeting">Good morning <strong>Ferdi</strong></h1>
             <a class="gate-orb" href="{enter_url()}" target="_self" aria-label="Start explore">
                 <span class="core-orbit-html" aria-hidden="true"></span>
                 <span class="core-reactor-html" aria-hidden="true"></span>
