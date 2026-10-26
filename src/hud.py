@@ -100,19 +100,19 @@ def get_business_line():
 
 
 def get_data_mode():
-    """Synthetic is the default; only an explicit URL parameter selects reported data."""
-    return "real" if get_query_value("mode", "synthetic").lower() == "real" else "synthetic"
+    """Real Data opens by default; Synthetic remains explicitly selectable."""
+    return "synthetic" if get_query_value("mode", "real").lower() == "synthetic" else "real"
 
 
 def _mode_query_param():
-    return "&mode=real" if get_data_mode() == "real" else ""
+    return "&mode=" + get_data_mode()
 
 
 def mode_url(mode):
     """Switch data sources and reopen home, preserving business-line selection."""
     if mode not in {"synthetic", "real"}:
         raise ValueError("Unsupported data mode")
-    suffix = "&mode=real" if mode == "real" else ""
+    suffix = "&mode=" + mode
     return f"?enter=1{_bl_query_param()}{suffix}"
 
 
@@ -161,8 +161,7 @@ def close_module():
     mode = get_data_mode()
     st.query_params.clear()
     st.query_params["enter"] = "1"
-    if mode == "real":
-        st.query_params["mode"] = "real"
+    st.query_params["mode"] = mode
 
 
 def module_url(module):
