@@ -456,7 +456,6 @@ def _genie_provenance(item):
     """Keep generated SQL, exact returned data and limitations inspectable."""
     if not item.get("used_genie"):
         return
-    st.caption("Real Data Genie · governed Unity Catalog views · read-only")
     with st.expander("Inspect Genie SQL and retrieved source rows",expanded=False):
         if item.get("sql"):
             st.code(item["sql"],language="sql")
@@ -513,8 +512,6 @@ def render_cet1_chat(evidence, *, compact=True):
     method=_answer_method(compact=False)
     chat_evidence=_genie_evidence(evidence,method)
     history=_get_thread(chat_evidence)
-    st.caption("Ask about capital, profitability, liquidity, segments or reported trends. "
-               "Unavailable business causes and figures are identified, not invented.")
     left,right=st.columns([2,1])
     with left:
         start=st.button("Investigate Q2 CET1",key="real_cfo_start_"+str(compact),
@@ -540,7 +537,6 @@ def render_cet1_chat(evidence, *, compact=True):
                     if item.get("used_genie"):
                         _genie_provenance(item)
                     else:
-                        st.caption("Model interpretation · factsheet figures are authoritative")
                         if index==len(visible)-1:
                             _show_answer_visual(evidence,history)
     st.divider()
@@ -611,7 +607,6 @@ def _show_answer_visual(evidence,history):
             tooltip=["quarter:N",alt.Tooltip("value:Q",format=",.2f")],
         )
         st.altair_chart(plot.properties(height=185),use_container_width=True)
-        st.caption("Published observations only · source: ABN AMRO quarterly factsheets.")
 
 
 def _render_jarvis_conversation(evidence,*,method="factsheet"):
@@ -636,7 +631,6 @@ def _render_jarvis_conversation(evidence,*,method="factsheet"):
                     if item.get("used_genie"):
                         _genie_provenance(item)
                     else:
-                        st.caption("AI interpretation · reported evidence only")
                         if index==len(visible)-1:
                             _show_answer_visual(evidence,history)
 
