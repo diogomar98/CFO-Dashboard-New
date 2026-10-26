@@ -27,7 +27,7 @@ def segment_driver_watchpoints(segments: pd.DataFrame, group: pd.DataFrame):
     g["date"]=pd.to_datetime(g["date"])
     last=g.sort_values("date").iloc[-1]
     end=last["date"]
-    periods=sorted(s["date"].unique())
+    periods=[pd.Timestamp(x) for x in sorted(s["date"].unique())]
     if end not in set(periods) or len(periods)<2:
         return []
     previous=max(period for period in periods if period<end)
@@ -52,7 +52,6 @@ def segment_driver_watchpoints(segments: pd.DataFrame, group: pd.DataFrame):
     rwa=float(latest.loc[rwa_leader,"rwa_m"])
     rwa_share=100*rwa/float(last["rwa_m"])
     group_deposit_delta=float(delta["deposits_m"].sum())
-    headline=lambda x: x.split(" Banking")[0] if x.endswith(" Banking") else x
 
     return [
         {
