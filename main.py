@@ -12,6 +12,41 @@ import html
 
 import streamlit as st
 
+
+def _cfo_workspace_requested():
+    """Keep existing CFO deep links functional while defaulting to the BCBS workspace."""
+    try:
+        params = st.query_params
+        return (
+            params.get("workspace") == "cfo"
+            or "module" in params
+            or "enter" in params
+        )
+    except AttributeError:
+        params = st.experimental_get_query_params()
+        return any(key in params for key in ("module", "enter")) or (
+            params.get("workspace", [""])[-1] == "cfo"
+        )
+
+
+_CFO_WORKSPACE = _cfo_workspace_requested()
+
+st.set_page_config(
+    page_title="A.R.C. | CFO Command" if _CFO_WORKSPACE else "A.R.C. | BCBS Cockpit",
+    page_icon="◉",
+    layout="wide",
+    initial_sidebar_state="collapsed",
+)
+
+# Route BCBS before importing or loading the existing CFO financial-data modules.
+# Existing CFO code below is intentionally left untouched.
+if not _CFO_WORKSPACE:
+    from src.bcbs_cover_memo import render_bcbs_cockpit
+
+    render_bcbs_cockpit()
+    st.stop()
+
+
 from src.cockpit_state import build_state
 from src.extended_data_loader import datasets_available
 from src.hud import (
@@ -34,13 +69,6 @@ from src.modules.copilot import consume_investigation_topic
 from src.rag import confidence_badge, confidence_label, rag_badge
 from src.weather import get_local_weather
 
-st.set_page_config(
-    page_title="A.R.C. | CFO Command",
-    page_icon="◉",
-    layout="wide",
-    initial_sidebar_state="collapsed",
-)
-
 from src.openai_partner import test_llm
 
 if st.button("Test LLM"):
@@ -49,6 +77,20 @@ if st.button("Test LLM"):
 # Emitted in cascade order; LOCAL_CSS last so this cockpit's overrides win.
 for stylesheet in (BASE_CSS, EXTENSIONS_CSS, PANELS_CSS, LOCAL_CSS):
     render_html(stylesheet)
+
+# Separate return path from every CFO screen to the new BCBS dashboard.
+render_html("""
+<div style="padding:.55rem .85rem;margin-bottom:.7rem;
+ background:linear-gradient(90deg,rgba(4,23,38,.95),rgba(8,35,56,.93));
+ border:1px solid rgba(82,231,255,.24);display:flex;align-items:center;
+ justify-content:space-between;flex-wrap:wrap;gap:.6rem;
+ font-family:Consolas,monospace;font-size:.71rem;letter-spacing:.05em">
+ <span style="color:#82b9d0">A.R.C. / CFO COCKPIT</span>
+ <a href="?layer=3" target="_self" style="text-decoration:none;color:#67e9ff">
+     ← BCBS Cockpit / Layer 03
+ </a>
+</div>
+""")
 
 # The greeting stands alone: no state, no data load, one way forward.
 if not has_entered():
